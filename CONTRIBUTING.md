@@ -7,6 +7,7 @@ This project is a Dallas-focused public-transit navigator and a learning-oriente
 ## Before contributing
 
 Read:
+
 - `README.md`
 - `AGENTS.md`
 - `docs/PROJECT_SPEC.md`
@@ -18,20 +19,36 @@ For larger changes, open/discuss an issue first.
 
 ## Local setup
 
-The exact commands will be finalized once application scaffolding exists.
+Follow the prerequisites and quick start in [README.md](README.md). Package
+boundaries, environment variables, and dependency choices are described in
+[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
 
-The intended workflow will use:
-- Node.js LTS
-- pnpm
-- Docker Compose
-- PostgreSQL/PostGIS
-- Redis
+Before submitting a PR, run from the repository root:
+
+```sh
+pnpm format:check
+pnpm lint
+pnpm typecheck
+pnpm test
+pnpm build
+pnpm infra:config
+```
+
+Use `pnpm format` to fix formatting. CI installs with `--frozen-lockfile`; include
+`pnpm-lock.yaml` when changing dependencies. Existing planning documents are
+excluded from the initial formatting rollout to avoid unrelated rewrites.
+
+Vitest discovers `src/**/*.test.ts` in each app, package, and worker. Start with
+small deterministic behavior tests. Run just the API tests with
+`pnpm --filter @dallas-transit/api test`. Playwright will be added when the UI
+milestone supplies a meaningful browser journey.
 
 ## Pull requests
 
 Keep PRs focused.
 
 A PR should:
+
 - explain the problem
 - explain the chosen approach
 - mention related issue
@@ -45,6 +62,7 @@ A PR should:
 Routing changes require extra care.
 
 Include:
+
 - a deterministic fixture or regression test
 - expected itinerary behavior
 - explanation of edge cases
@@ -63,6 +81,7 @@ Do not add undocumented/unofficial realtime endpoints without discussion.
 New production dependencies should be justified in the PR.
 
 Consider:
+
 - license
 - maintenance
 - security

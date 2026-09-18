@@ -1,0 +1,35 @@
+{
+  "name": "dallas-transit",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "packageManager": "pnpm@12.4.2",
+  "engines": {
+    "node": ">=24.21.0 <25",
+    "pnpm": "12.4.2"
+  },
+  "scripts": {
+    "dev": "pnpm --parallel --filter @dallas-transit/web --filter @dallas-transit/api dev",
+    "build": "pnpm -r build",
+    "lint": "eslint . && pnpm --filter @dallas-transit/web lint",
+    "typecheck": "pnpm -r typecheck",
+    "test": "vitest run",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "infra:up": "docker compose --project-directory infra/docker -f infra/docker/compose.yaml up -d --wait --wait-timeout 120",
+    "infra:down": "docker compose --project-directory infra/docker -f infra/docker/compose.yaml down",
+    "infra:config": "docker compose --project-directory infra/docker -f infra/docker/compose.yaml config --quiet",
+    "infra:status": "docker compose --project-directory infra/docker -f infra/docker/compose.yaml ps"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.39.5",
+    "@types/node": "24.13.5",
+    "eslint": "9.39.5",
+    "eslint-config-prettier": "10.1.8",
+    "prettier": "3.9.7",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.70.0",
+    "vitest": "5.0.1"
+  }
+}

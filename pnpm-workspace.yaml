@@ -1,4 +1,15 @@
 packages:
-  - "apps/*"
-  - "packages/*"
-  - "workers/*"
+  - 'apps/*'
+  - 'packages/*'
+  - 'workers/*'
+
+engineStrict: true
+saveExact: true
+pmOnFail: error
+
+# Native tooling used by tsx/Vitest, Tailwind, and Next.js.
+allowBuilds:
+  esbuild: true
+  '@tailwindcss/oxide': true
+  sharp: true
+  unrs-resolver: true
