@@ -1,0 +1,24 @@
+node_modules/
+.next/
+dist/
+coverage/
+pnpm-lock.yaml
+**/next-env.d.ts
+data/
+.codex-log/
+.pnpm-store/
+# Preserve pre-foundation documentation and accepted decisions as written.
+AGENTS.md
+START_HERE.md
+CODE_OF_CONDUCT.md
+SECURITY.md
+docs/PROJECT_SPEC.md
+docs/ARCHITECTURE.md
+docs/ROADMAP.md
+docs/TECH_STACK.md
+docs/DATA_FEASIBILITY*.md
+docs/OPEN_SOURCE*.md
+docs/CODEX_SETUP.md
+docs/adr/
+.github/ISSUE_TEMPLATE/
+.github/PULL_REQUEST_TEMPLATE.md
