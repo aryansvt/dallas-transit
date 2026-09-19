@@ -1,0 +1,3 @@
+agency_id,agency_name,agency_url,agency_timezone,agency_lang,agency_phone,agency_fare_url
+a,Example Dallas Transit,https://example.org,America/Chicago,en,,
+b,Example Rail,https://rail.example.org,America/Chicago,en,,

@@ -1,0 +1,4 @@
+stop_id,stop_code,stop_name,stop_desc,stop_lat,stop_lon,zone_id,stop_url,wheelchair_boarding
+s1,001,"First, Main",,32.123456789012345678,-96.001000,,,1
+s2,002,Second,,32.124,-96.002,,,0
+s3,003,Yard,,32.125,-96.003,,,

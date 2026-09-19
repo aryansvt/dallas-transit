@@ -1,6 +1,7 @@
 # Development foundation
 
-Milestone 1 implements scaffolding only. All accepted ADRs remain unchanged.
+Milestone 1 supplies the development foundation; Milestone 2 adds static GTFS
+ingestion and PostgreSQL integration tests. All accepted ADRs remain unchanged.
 Use the [README](../README.md) for setup and root commands.
 
 ## Packages and compilation
@@ -16,10 +17,11 @@ relative imports and compile into `dist/`; the web app uses Next.js's bundler
 resolution. Package exports expose only their public `dist/index` entrypoint.
 No TypeScript path aliases bypass package boundaries.
 
-The five core packages and ingestion worker intentionally contain only `export {}`.
-They have no runtime dependencies or invented transit types. Cross-package runtime
-wiring is deferred until an actual interface exists: declare dependencies with
-`workspace:*`, import the package name, and build dependencies before consumers.
+The ingestion worker depends on `@dallas-transit/gtfs` through `workspace:*` and
+its public package exports. Root test/typecheck/CLI commands build that dependency
+first; package-local worker typecheck requires `pnpm --filter @dallas-transit/gtfs build`
+first on a clean checkout. No path alias bypasses that boundary. GTFS input types
+remain in `packages/gtfs`; domain/shared/router/realtime packages remain placeholders.
 In particular, the router has no HTTP, React, SQL, or Redis dependency.
 
 API construction is separate from socket startup, allowing Fastify injection tests
@@ -48,13 +50,30 @@ Versions below were checked against npm on 2026-09-18.
 | tsx                                           | 4.23.13                   | Development-only TypeScript execution for the API watcher.                                                                      |
 | @types/node / @types/react / @types/react-dom | 24.13.5 / 19.3.0 / 19.3.0 | Types matched to the selected runtime/framework.                                                                                |
 
-The four production dependencies (Next.js, React, React DOM, Fastify) are MIT
+The original four production dependencies (Next.js, React, React DOM, Fastify) are MIT
 licensed, have current stable releases, and are the maintained projects selected
 by the accepted stack. Standard Node/DOM APIs do not supply their framework
-behavior. No production utility, database client, ORM, map library, or query client
-is added. Build/test tooling is development-only. pnpm explicitly permits native
+behavior. Build/test tooling is development-only. pnpm explicitly permits native
 install scripts required by esbuild, Tailwind's oxide, Next.js's sharp dependency,
 and the unrs resolver used by Next.js linting.
+
+Milestone 2 adds these exact-pinned MIT-licensed dependencies, checked against npm
+on 2026-09-18 and validated on the pinned Node 24 runtime:
+
+| Dependency                  | Version        | Reason / cost                                                                                                                                                                                                        |
+| --------------------------- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `csv-parse`                 | 7.0.2          | Quoted CSV, chunk boundaries, BOM and streaming backpressure; Node has no CSV parser. About 1.61 MB unpacked, no runtime dependencies. Confined to GTFS.                                                             |
+| `pg`                        | 8.23.0         | Parameterized SQL, transactions and PostgreSQL protocol; Node has no PostgreSQL client. About 100 KB direct unpacked package plus small protocol helpers; supports Node >=16. Worker only; no ORM.                   |
+| `yauzl`                     | 3.4.0          | Lazy ZIP entry streams and size/path validation without extracting archives; Node's zlib is compression, not a ZIP reader. About 110 KB direct unpacked package plus small helpers; supports Node >=12. Worker only. |
+| `@types/pg`, `@types/yauzl` | 8.23.1 / 3.4.0 | Development-only declarations for strict TypeScript.                                                                                                                                                                 |
+
+These are current maintained stable releases, not large frameworks. Primary
+references: [node-postgres queries](https://node-postgres.com/features/queries),
+[CSV async iteration](https://csv.js.org/parse/api/async_iterator/), and
+[yauzl documentation](https://github.com/thejoshwolfe/yauzl). Node's crypto, zlib,
+UTF-8 decoder, filesystem, argument parser and environment-file loading cover the
+remaining needs. No ORM, COPY client, archive writer, dotenv, or realtime library
+is introduced. The synthetic ZIP writer is test-only.
 
 npm marks ESLint 9 as deprecated. It is pinned because the current React plugin in
 Next.js's recommended lint configuration declares support through ESLint 9, not 10.
@@ -72,7 +91,7 @@ The Compose project is named `dallas-transit`. Only these local services are cre
 
 - `postgis/postgis:18-3.6`: PostgreSQL 18 and PostGIS 3.6, with named volume
   `dallas-transit_postgres-data` mounted at PostgreSQL 18's `/var/lib/postgresql`.
-  The upstream image enables PostGIS; this project creates no transit tables/schema.
+  The upstream image enables PostGIS; `pnpm gtfs migrate` creates the static schema.
 - `redis:8.10.1-alpine`: Redis with disk snapshots/AOF disabled and `/data` on tmpfs.
   Cache contents disappear when the container stops. This follows ADR 0004.
 
@@ -81,16 +100,18 @@ waits up to 120 seconds for healthy containers after startup. The PostGIS tag pi
 the supported major/minor family and may receive upstream patch refreshes; Redis
 pins a patch tag. No `latest` tags are used.
 
-| Variable                    | Default                             | Consumer                            |
-| --------------------------- | ----------------------------------- | ----------------------------------- |
-| `POSTGRES_DB`               | `dallas_transit`                    | Compose / initial database creation |
-| `POSTGRES_USER`             | `dallas_dev`                        | Compose / initial database creation |
-| `POSTGRES_PASSWORD`         | `local_only_password`               | Compose / local-only credential     |
-| `POSTGRES_PORT`             | `5432`                              | Compose host port                   |
-| `REDIS_PORT`                | `6379`                              | Compose host port                   |
-| `HOST`                      | `127.0.0.1`                         | API listener                        |
-| `PORT`                      | `3001`                              | API listener                        |
-| `DATABASE_URL`, `REDIS_URL` | Examples in `apps/api/.env.example` | Reserved; not consumed yet          |
+| Variable                        | Default                                                    | Consumer                                     |
+| ------------------------------- | ---------------------------------------------------------- | -------------------------------------------- |
+| `POSTGRES_DB`                   | `dallas_transit`                                           | Compose / initial database creation          |
+| `POSTGRES_USER`                 | `dallas_dev`                                               | Compose / initial database creation          |
+| `POSTGRES_PASSWORD`             | `local_only_password`                                      | Compose / local-only credential              |
+| `POSTGRES_PORT`                 | `5432`                                                     | Compose host port                            |
+| `REDIS_PORT`                    | `6379`                                                     | Compose host port                            |
+| `HOST`                          | `127.0.0.1`                                                | API listener                                 |
+| `PORT`                          | `3001`                                                     | API listener                                 |
+| `DATABASE_URL`                  | Local Compose URL in `workers/transit-ingest/.env.example` | Static ingestion CLI                         |
+| `TEST_DATABASE_URL`             | Same local Compose URL                                     | Integration-test server; requires `CREATEDB` |
+| API `DATABASE_URL`, `REDIS_URL` | Examples in `apps/api/.env.example`                        | Still reserved by the API                    |
 
 Changing PostgreSQL initialization variables does not change credentials inside an
 existing volume. Keep the API URL examples aligned if you customize infrastructure.
@@ -106,15 +127,98 @@ No real `.env`, generated output, raw transit data, or local database files belo
 in Git. Examples contain only public development defaults. No DART access is needed
 to install, test, or build this foundation.
 
+## Static GTFS workflow
+
+Run all commands below from the repository root. The local defaults need no `.env`.
+For a custom database, copy `workers/transit-ingest/.env.example` beside it as
+`.env` and set `DATABASE_URL`; set `TEST_DATABASE_URL` separately for tests. The
+CLI and integration script load this optional file with Node; existing process
+environment values take precedence. No realtime API credentials are needed.
+
+```sh
+pnpm install --frozen-lockfile
+pnpm infra:up
+pnpm gtfs migrate
+pnpm gtfs import --archive data/raw/gtfs/dart-recent.zip --source-url https://www.dart.org/transitdata/recent/google_transit.zip
+pnpm gtfs inspect --source dart
+```
+
+The archive must already exist locally. Official sources and outstanding data-use
+terms are recorded in [DATA_FEASIBILITY.md](DATA_FEASIBILITY.md). Keep all downloaded
+feeds under ignored `data/raw/`. The URL records provenance; the importer never
+fetches it. `--source dart` is the default logical source. JSON output reports the
+publication UUID/hash, counts, diagnostics, elapsed milliseconds and whether the
+exact archive was already imported; progress goes to stderr. A failure exits
+nonzero and rolls back entity changes. See `static_gtfs.import_attempts` for its
+database audit and [STATIC_GTFS.md](STATIC_GTFS.md) for crash/connection-loss cases.
+
+Use the reported UUID and inclusive coverage dates to activate deliberately:
+
+```sh
+pnpm gtfs activate --feed <feed-uuid> --from 2026-09-14 --through 2026-09-20
+pnpm gtfs inspect --source dart --date 2026-09-18
+```
+
+Replace angle-bracket placeholders; the dates above describe the retained Milestone
+0 recent publication, not a permanently current schedule. `inspect --date` reports
+the selected publication and that date's scheduled trip count, or `selection: null`
+when no publication is assigned. It never extrapolates beyond activation/coverage.
+Import/activate a newer publication for its effective dates; retain the earlier
+version for overnight service. Same-date corrections can replace just a specified
+subrange. Repeat the same import safely: exact source/hash matches return the
+existing publication without duplicating entities. Never join raw IDs across feeds.
+
+For SQL inspection (default Compose user/database):
+
+```sh
+docker compose --project-directory infra/docker -f infra/docker/compose.yaml exec postgres psql -U dallas_dev -d dallas_transit
+```
+
+```sql
+SELECT feed_id, feed_version, coverage_start, coverage_end, row_counts
+FROM static_gtfs.feed_versions;
+SELECT source_key, service_date, feed_id FROM static_gtfs.feed_activation
+ORDER BY source_key, service_date;
+SELECT attempt_id, status, error FROM static_gtfs.import_attempts
+ORDER BY started_at DESC;
+```
+
+Validate the importer without internet or DART data:
+
+```sh
+pnpm test
+pnpm test:integration
+```
+
+The integration suite creates/drops only its own random database and fails if
+PostGIS or the connection is unavailable. Normal development data is preserved.
+Its role needs permission to create databases/extensions; use the local Compose
+server, not production. CI starts Compose and runs this same suite, then stops
+services in an `always()` step.
+
+To deliberately delete **all static publications, activations, and import audits**
+from the configured database while retaining schema/migrations:
+
+```sh
+pnpm gtfs reset-static-data --confirm-delete-static-data
+```
+
+This command is never run automatically. To stop services while retaining the
+normal PostgreSQL development volume:
+
+```sh
+pnpm infra:down
+```
+
 ## Deferred work
 
 The web app includes basic metadata and a web manifest as PWA preparation only.
 Icons, service workers, offline behavior, and installability validation belong in
 the PWA milestone. Playwright is deferred until meaningful UI journeys exist.
-MapLibre, TanStack Query, database clients, transit schemas, ingestion, domain
-models, routing, realtime, and deployments are all deferred to their own milestones.
+MapLibre, TanStack Query, routing-domain models, routing, realtime, and deployments
+are deferred to their own milestones. Static ingestion does not implement a router.
 
 GitHub Actions runs frozen install, formatting, lint, types, tests, build, and
-Compose configuration validation on PRs and pushes to `main`. No credentials or
-running data services are needed for these scaffold tests. Docker health is checked
-locally; storage integration tests should add CI services when introduced.
+Compose configuration validation, and PostGIS fixture integration tests on PRs
+and pushes to `main`. Tests need no DART data or network access after dependencies
+and Docker images are installed.

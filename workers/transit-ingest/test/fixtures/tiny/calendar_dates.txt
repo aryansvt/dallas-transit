@@ -1,0 +1,4 @@
+service_id,date,exception_type
+week,20260918,2
+week,20260919,1
+special,20260920,1
