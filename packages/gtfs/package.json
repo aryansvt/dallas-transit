@@ -13,6 +13,9 @@
   "files": [
     "dist"
   ],
+  "dependencies": {
+    "csv-parse": "7.0.2"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit"

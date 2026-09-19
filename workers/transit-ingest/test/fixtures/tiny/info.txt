@@ -1,0 +1,1 @@
+Synthetic fixture: not DART source data. Supplemental block times have no inferred units.

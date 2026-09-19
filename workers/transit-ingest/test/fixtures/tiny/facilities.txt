@@ -1,0 +1,2 @@
+facility_id,facility_code,facility_name,facility_desc,facility_lat,facility_lon,facility_type,facility_url
+f1,01,Example Center,,32.124,-96.002,1,

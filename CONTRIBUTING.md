@@ -32,6 +32,9 @@ pnpm typecheck
 pnpm test
 pnpm build
 pnpm infra:config
+pnpm infra:up
+pnpm test:integration
+pnpm infra:down
 ```
 
 Use `pnpm format` to fix formatting. CI installs with `--frozen-lockfile`; include
@@ -42,6 +45,14 @@ Vitest discovers `src/**/*.test.ts` in each app, package, and worker. Start with
 small deterministic behavior tests. Run just the API tests with
 `pnpm --filter @dallas-transit/api test`. Playwright will be added when the UI
 milestone supplies a meaningful browser journey.
+
+`pnpm test` is offline and does not need backing services. Database integration
+tests are a separate required CI gate (`pnpm test:integration`), not silently
+skipped unit tests. They use real PostGIS and create/drop a uniquely named test
+database, preserving normal local transit data. The test role needs `CREATEDB`;
+the local Compose role has it. Custom URLs belong in the worker's ignored `.env`.
+See [the static GTFS design](docs/STATIC_GTFS.md) for fixture and import details.
+Do not edit applied SQL migrations; add a new numbered migration.
 
 ## Pull requests
 

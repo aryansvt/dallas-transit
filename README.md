@@ -8,9 +8,10 @@ The project aims to provide concrete bus/rail journey planning, transfers, live 
 
 ## Status
 
-Milestone 1 provides the repository and local development foundation. The web app
-is a development placeholder and the API exposes health checks. Transit navigation
-is not implemented.
+Milestone 2 provides repeatable static GTFS ingestion into PostgreSQL/PostGIS,
+with version-scoped data, date-aware activation, and fixture-based tests. The web
+app is a development placeholder and the API exposes health checks. Transit
+navigation is not implemented.
 
 Do not rely on this project for real-world travel until a release explicitly states otherwise.
 
@@ -91,6 +92,8 @@ No environment file is required for the default local setup. Optional examples:
   to override database credentials and infrastructure ports.
 - [`apps/api/.env.example`](apps/api/.env.example): copy beside it as `.env` to
   override `HOST`/`PORT`; database/cache URLs are documented for later integration.
+- [`workers/transit-ingest/.env.example`](workers/transit-ingest/.env.example):
+  optional database URLs for the importer and isolated integration tests.
 
 Defaults are **local development only**, not production credentials. Infrastructure
 ports bind to `127.0.0.1`; Redis has no password in this local setup. The web shell
@@ -100,19 +103,21 @@ does not call the API and needs no URL environment variable yet.
 
 Run these from the repository root:
 
-| Command             | Purpose                                                       |
-| ------------------- | ------------------------------------------------------------- |
-| `pnpm dev`          | Start web and API in development                              |
-| `pnpm build`        | Build every application/package/worker                        |
-| `pnpm lint`         | ESLint across TypeScript and configuration files              |
-| `pnpm typecheck`    | Check all eight workspaces, including generated Next.js types |
-| `pnpm test`         | Run Vitest tests across apps, packages, and workers           |
-| `pnpm format`       | Apply Prettier formatting                                     |
-| `pnpm format:check` | Check formatting without changing files                       |
-| `pnpm infra:config` | Validate Docker Compose configuration                         |
-| `pnpm infra:up`     | Start PostGIS and Redis and wait for healthy status           |
-| `pnpm infra:status` | Show local service status                                     |
-| `pnpm infra:down`   | Stop/remove local containers; retain PostgreSQL data          |
+| Command                 | Purpose                                                             |
+| ----------------------- | ------------------------------------------------------------------- |
+| `pnpm dev`              | Start web and API in development                                    |
+| `pnpm build`            | Build every application/package/worker                              |
+| `pnpm lint`             | ESLint across TypeScript and configuration files                    |
+| `pnpm typecheck`        | Check all eight workspaces, including generated Next.js types       |
+| `pnpm test`             | Run Vitest tests across apps, packages, and workers                 |
+| `pnpm test:integration` | Test static ingestion against local PostGIS in an isolated database |
+| `pnpm gtfs --help`      | Show migration/import/activation/inspection/reset commands          |
+| `pnpm format`           | Apply Prettier formatting                                           |
+| `pnpm format:check`     | Check formatting without changing files                             |
+| `pnpm infra:config`     | Validate Docker Compose configuration                               |
+| `pnpm infra:up`         | Start PostGIS and Redis and wait for healthy status                 |
+| `pnpm infra:status`     | Show local service status                                           |
+| `pnpm infra:down`       | Stop/remove local containers; retain PostgreSQL data                |
 
 Run the same quality gates as CI:
 
@@ -123,6 +128,9 @@ pnpm typecheck
 pnpm test
 pnpm build
 pnpm infra:config
+pnpm infra:up
+pnpm test:integration
+pnpm infra:down
 ```
 
 After building, run production scaffolds in separate terminals with
@@ -130,17 +138,36 @@ After building, run production scaffolds in separate terminals with
 `pnpm --filter @dallas-transit/api start`. Stop with Ctrl+C, then run
 `pnpm infra:down` when finished with the backing services.
 
+## Import a static schedule
+
+Use a locally obtained official GTFS ZIP under the Git-ignored `data/raw/gtfs/`.
+The importer does not download feeds or require realtime credentials.
+
+```sh
+pnpm infra:up
+pnpm gtfs migrate
+pnpm gtfs import --archive data/raw/gtfs/dart-recent.zip --source-url https://www.dart.org/transitdata/recent/google_transit.zip
+pnpm gtfs inspect
+```
+
+Import stages the publication. Inspect its ID and coverage, then explicitly
+activate the appropriate service dates. The newest DART publication may start in
+the future. See [the complete workflow](docs/DEVELOPMENT.md#static-gtfs-workflow)
+for activation, verification, and explicit reset, and
+[the schema/import design](docs/STATIC_GTFS.md) for supported fields and limits.
+Stop local containers with `pnpm infra:down`; the database volume is preserved.
+
 ## Repository
 
 ```text
 apps/web/                 Next.js + React + Tailwind shell
 apps/api/                 Fastify server and health tests
 packages/domain/          Future portable transit types/invariants
-packages/gtfs/            Future static GTFS normalization
+packages/gtfs/            Streaming static GTFS parsing and normalization
 packages/router/          Future independent routing engine
 packages/realtime/        Future realtime mapping
 packages/shared/          Future genuinely shared utilities
-workers/transit-ingest/   Future ingestion entrypoints
+workers/transit-ingest/   Static import CLI, SQL migrations, and orchestration
 infra/docker/             Local PostGIS + Redis
 docs/                     Specification, architecture, decisions, and setup notes
 ```

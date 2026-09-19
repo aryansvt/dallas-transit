@@ -11,8 +11,18 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "migrations"
   ],
+  "dependencies": {
+    "@dallas-transit/gtfs": "workspace:*",
+    "pg": "8.23.0",
+    "yauzl": "3.4.0"
+  },
+  "devDependencies": {
+    "@types/pg": "8.23.1",
+    "@types/yauzl": "3.4.0"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit"

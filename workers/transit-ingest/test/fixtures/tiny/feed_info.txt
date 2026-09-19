@@ -1,0 +1,2 @@
+feed_publisher_name,feed_publisher_url,feed_lang,feed_version,feed_start_date,feed_end_date,feed_contact_url
+Example,https://example.org,en,synthetic-1,20260914,20260920,
