@@ -1,7 +1,8 @@
 # Development foundation
 
 Milestone 1 supplies the development foundation; Milestone 2 adds static GTFS
-ingestion; Milestone 3 adds the schedule router and its database adaptation tests.
+ingestion; Milestone 3 adds the schedule router and its database adaptation tests;
+Milestone 4 adds geographic composition and pedestrian-provider adapters.
 All accepted ADRs remain unchanged.
 Use the [README](../README.md) for setup and root commands.
 
@@ -26,7 +27,9 @@ No path alias bypasses those boundaries. GTFS record types remain in `packages/g
 router-owned schedule and result types live in `packages/router`. Domain/shared/realtime
 remain placeholders. The router has no production dependencies, including HTTP,
 React, SQL, or Redis. The worker reuses `pg` for the read-only routing adapter;
-Milestone 3 adds no external dependencies.
+Milestones 3 and 4 add no external dependencies. Geographic composition and value
+types stay in the router; asynchronous candidate/provider orchestration stays in
+the worker alongside local validation tooling. The Valhalla adapter uses Node fetch.
 
 API construction is separate from socket startup, allowing Fastify injection tests
 without a port or backing services. Node loads the API's optional `.env` itself;
@@ -234,12 +237,34 @@ assumption, not verified station walking time. Stop infrastructure afterward wit
 `pnpm infra:down`, preserving its volume. See [ROUTING_CORE.md](ROUTING_CORE.md) for
 overnight examples, input/algorithm semantics and the Milestone 4 boundary.
 
+## Geographic journey validation
+
+```sh
+pnpm test:journey
+pnpm journey:validate --mode fixture --origin '32,-96' --destination '32.01,-96' --date 2026-09-18 --departure 08:00:00 --runs 100
+pnpm infra:up
+pnpm test:integration
+pnpm journey:validate --mode candidates --origin '32.7812,-96.8056' --destination '33.0024,-96.7029' --date 2026-09-18 --departure 08:00:00 --change-seconds 120 --runs 5 --explain
+pnpm infra:down
+```
+
+Fixture mode is synthetic and offline. Candidate mode reads retained DART data and
+reports geographic candidates and separate stop-to-stop journeys, with no walking
+claims. Real-provider mode requires an explicit Valhalla `/route` URL through
+`--valhalla-url` or `WALKING_VALHALLA_URL`, plus the database inputs above. Missing
+configuration returns an explicit nonzero unavailable result, never a fake route.
+No provider URL is enabled by default. `--mode provider` uses one run without a
+warm-up or retries; configure small counts/concurrency for the selected service.
+The public demo was used only for one two-call development observation, not as
+production infrastructure. See [the design](GEOGRAPHIC_JOURNEY_PLANNING.md) and
+[review](MILESTONE_4_REVIEW.md) for contracts, bounds, exact evidence and limitations.
+
 ## Deferred work
 
 The web app includes basic metadata and a web manifest as PWA preparation only.
 Icons, service workers, offline behavior, and installability validation belong in
 the PWA milestone. Playwright is deferred until meaningful UI journeys exist.
-MapLibre, TanStack Query, geographic routing, API journeys, realtime, and deployments
+MapLibre, TanStack Query, API journeys, realtime, and deployments
 are deferred to their own milestones. Static ingestion remains separate from the
 schedule-routing algorithm.
 
