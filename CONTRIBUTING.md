@@ -88,6 +88,13 @@ arrival times. The SQL adapter lives in the ingestion worker and is covered by
 `pnpm test:integration`; do not introduce database access into the router. Full
 DART validation is supplemental and need not run during ordinary unit-test edits.
 
+Geographic changes should also follow [the geographic planning design](docs/GEOGRAPHIC_JOURNEY_PLANNING.md).
+`pnpm test:journey` exercises offline access/egress, walking-aware alternatives,
+provider validation and bounded concurrency. PostGIS candidate tests run in
+`pnpm test:integration`. Keep provider calls outside `packages/router`; never use
+straight-line pruning distances as walking routes. Live provider checks are
+optional supplemental evidence and must not become unit-test dependencies.
+
 ## Transit data
 
 Do not commit proprietary or restricted transit data.

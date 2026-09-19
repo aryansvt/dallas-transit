@@ -17,6 +17,8 @@
     "test": "pnpm --filter @dallas-transit/gtfs --filter @dallas-transit/router build && vitest run",
     "test:integration": "pnpm --filter @dallas-transit/gtfs --filter @dallas-transit/router build && node --env-file-if-exists=workers/transit-ingest/.env node_modules/vitest/vitest.mjs run --config vitest.integration.config.ts",
     "test:router": "vitest run packages/router",
+    "test:journey": "pnpm --filter @dallas-transit/router build && vitest run packages/router/src/geographic.test.ts workers/transit-ingest/src/geographic-planner.test.ts workers/transit-ingest/src/walking-provider.test.ts workers/transit-ingest/src/valhalla-walking.test.ts",
+    "journey:validate": "pnpm --filter @dallas-transit/transit-ingest... build && node --env-file-if-exists=workers/transit-ingest/.env workers/transit-ingest/dist/journey-cli.js",
     "routing:validate": "pnpm --filter @dallas-transit/transit-ingest... build && node --env-file-if-exists=workers/transit-ingest/.env workers/transit-ingest/dist/routing-cli.js",
     "gtfs": "pnpm --filter @dallas-transit/transit-ingest... build && node --env-file-if-exists=workers/transit-ingest/.env workers/transit-ingest/dist/cli.js",
     "format": "prettier --write .",
