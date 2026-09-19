@@ -1,7 +1,8 @@
 # Development foundation
 
 Milestone 1 supplies the development foundation; Milestone 2 adds static GTFS
-ingestion and PostgreSQL integration tests. All accepted ADRs remain unchanged.
+ingestion; Milestone 3 adds the schedule router and its database adaptation tests.
+All accepted ADRs remain unchanged.
 Use the [README](../README.md) for setup and root commands.
 
 ## Packages and compilation
@@ -17,12 +18,15 @@ relative imports and compile into `dist/`; the web app uses Next.js's bundler
 resolution. Package exports expose only their public `dist/index` entrypoint.
 No TypeScript path aliases bypass package boundaries.
 
-The ingestion worker depends on `@dallas-transit/gtfs` through `workspace:*` and
-its public package exports. Root test/typecheck/CLI commands build that dependency
-first; package-local worker typecheck requires `pnpm --filter @dallas-transit/gtfs build`
-first on a clean checkout. No path alias bypasses that boundary. GTFS input types
-remain in `packages/gtfs`; domain/shared/router/realtime packages remain placeholders.
-In particular, the router has no HTTP, React, SQL, or Redis dependency.
+The ingestion worker depends on `@dallas-transit/gtfs` and `@dallas-transit/router`
+through `workspace:*` and their public package exports. Root test/typecheck/CLI
+commands build those dependencies first. For package-local worker typecheck on a
+clean checkout, first run `pnpm --filter @dallas-transit/gtfs --filter @dallas-transit/router build`.
+No path alias bypasses those boundaries. GTFS record types remain in `packages/gtfs`;
+router-owned schedule and result types live in `packages/router`. Domain/shared/realtime
+remain placeholders. The router has no production dependencies, including HTTP,
+React, SQL, or Redis. The worker reuses `pg` for the read-only routing adapter;
+Milestone 3 adds no external dependencies.
 
 API construction is separate from socket startup, allowing Fastify injection tests
 without a port or backing services. Node loads the API's optional `.env` itself;
@@ -210,13 +214,34 @@ normal PostgreSQL development volume:
 pnpm infra:down
 ```
 
+## Schedule routing validation
+
+`pnpm test:router` runs the deterministic core fixtures without any services.
+`pnpm test:integration` also covers date-selected SQL adaptation using an isolated
+fixture database. Both are covered by the existing CI commands.
+
+For local DART integration evidence, start infrastructure and run:
+
+```sh
+pnpm routing:validate --date 2026-09-18 --change-seconds 120 --runs 5 --query '22749,26895,08:00:00' --query '32562,32553,08:00:00'
+```
+
+This requires Milestone 2's retained recent publication activated on that service
+date. The CLI only reads the database, loads one schedule, and reports build/query
+timings, counts, memory snapshots and exact journey legs. Quote comma-delimited
+queries in PowerShell. `--change-seconds` is required: 120 here is a validation
+assumption, not verified station walking time. Stop infrastructure afterward with
+`pnpm infra:down`, preserving its volume. See [ROUTING_CORE.md](ROUTING_CORE.md) for
+overnight examples, input/algorithm semantics and the Milestone 4 boundary.
+
 ## Deferred work
 
 The web app includes basic metadata and a web manifest as PWA preparation only.
 Icons, service workers, offline behavior, and installability validation belong in
 the PWA milestone. Playwright is deferred until meaningful UI journeys exist.
-MapLibre, TanStack Query, routing-domain models, routing, realtime, and deployments
-are deferred to their own milestones. Static ingestion does not implement a router.
+MapLibre, TanStack Query, geographic routing, API journeys, realtime, and deployments
+are deferred to their own milestones. Static ingestion remains separate from the
+schedule-routing algorithm.
 
 GitHub Actions runs frozen install, formatting, lint, types, tests, build, and
 Compose configuration validation, and PostGIS fixture integration tests on PRs

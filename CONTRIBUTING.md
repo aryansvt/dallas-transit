@@ -81,6 +81,13 @@ Include:
 
 Do not modify routing output merely to imitate a third-party router without understanding the discrepancy.
 
+Read [the routing-core design](docs/ROUTING_CORE.md) before changing patterns,
+rounds, dominance, or transfer semantics. `pnpm test:router` runs tiny offline
+fixtures and an independent exhaustive comparison. Assert exact legs as well as
+arrival times. The SQL adapter lives in the ingestion worker and is covered by
+`pnpm test:integration`; do not introduce database access into the router. Full
+DART validation is supplemental and need not run during ordinary unit-test edits.
+
 ## Transit data
 
 Do not commit proprietary or restricted transit data.
