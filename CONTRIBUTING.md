@@ -95,6 +95,16 @@ provider validation and bounded concurrency. PostGIS candidate tests run in
 straight-line pruning distances as walking routes. Live provider checks are
 optional supplemental evidence and must not become unit-test dependencies.
 
+## API changes
+
+Read [JOURNEY_API.md](docs/JOURNEY_API.md) before changing V1 fields or lifecycle
+semantics. Run `pnpm test:api` for injection, deadlines, cancellation and schedule
+reuse tests. `pnpm test:integration` includes actual pooled PostGIS behavior in
+isolated databases. `pnpm api:validate --mode fixture` exercises the complete
+offline contract; optional `--mode retained-dart` reads existing DART data with
+explicitly synthetic walks. Neither command calls a public walking service.
+Keep HTTP policy and serialization in the API, and pure routing outside it.
+
 ## Transit data
 
 Do not commit proprietary or restricted transit data.

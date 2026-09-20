@@ -3,11 +3,17 @@ import { readServerConfig } from './config.js';
 
 describe('server configuration', () => {
   it('defaults to a loopback listener on port 3001', () => {
-    expect(readServerConfig({})).toEqual({ host: '127.0.0.1', port: 3001 });
+    expect(readServerConfig({})).toMatchObject({
+      host: '127.0.0.1',
+      port: 3001,
+      poolSize: 4,
+      scheduleEntries: 2,
+      journeyTimeoutMs: 15000,
+    });
   });
 
   it('accepts explicit host and port overrides', () => {
-    expect(readServerConfig({ HOST: '0.0.0.0', PORT: '4100' })).toEqual({
+    expect(readServerConfig({ HOST: '0.0.0.0', PORT: '4100' })).toMatchObject({
       host: '0.0.0.0',
       port: 4100,
     });
@@ -27,4 +33,30 @@ describe('server configuration', () => {
       'HOST must not be empty',
     );
   });
+  it.each([
+    { DATABASE_POOL_SIZE: '0' },
+    { DATABASE_POOL_SIZE: '17' },
+    { JOURNEY_TIMEOUT_MS: '99' },
+    { JOURNEY_TIMEOUT_MS: '30001' },
+    { SCHEDULE_CACHE_ENTRIES: '5' },
+    { SCHEDULE_CACHE_TTL_MS: 'Infinity' },
+    { JOURNEY_CONCURRENCY: '0' },
+    { TRANSIT_CHANGE_SECONDS: '-1' },
+    { DATABASE_URL: 'http://example.org' },
+    { DATABASE_URL: 'not-a-url' },
+    { NODE_ENV: 'production' },
+    { WALKING_VALHALLA_URL: '' },
+    { WALKING_VALHALLA_URL: 'http://user:secret@example.org/route' },
+    { WALKING_VALHALLA_URL: 'https://example.org/route?key=secret' },
+  ])(
+    'rejects unsafe or unbounded configuration without leaking values %j',
+    (env) => {
+      expect(() => readServerConfig(env)).toThrow();
+      try {
+        readServerConfig(env);
+      } catch (error) {
+        expect(String(error)).not.toContain('secret');
+      }
+    },
+  );
 });

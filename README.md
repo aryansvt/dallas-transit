@@ -8,12 +8,11 @@ The project aims to provide concrete bus/rail journey planning, transfers, live 
 
 ## Status
 
-Milestone 4 adds coordinate-to-coordinate schedule journeys through bounded
-PostGIS candidate search, pedestrian-provider access/egress and the independent
-Milestone 3 transit router. An optional Valhalla adapter requires an explicitly
-configured service. The web app remains a placeholder and the API exposes health
-checks. See the [geographic design](docs/GEOGRAPHIC_JOURNEY_PLANNING.md) and
-[Milestone 4 review](docs/MILESTONE_4_REVIEW.md) for validation and limitations.
+Milestone 5 exposes static geographic journeys through `POST /v1/journeys`, with
+date-scoped stop/route/nearby reads, pooled PostgreSQL, prepared-schedule reuse,
+bounded work, cancellation and deadlines. Walking requires an explicitly configured
+service. The web app remains a placeholder. See the [API contract](docs/JOURNEY_API.md)
+and [Milestone 5 review](docs/MILESTONE_5_REVIEW.md) for validation and limitations.
 
 Do not rely on this project for real-world travel until a release explicitly states otherwise.
 
@@ -85,15 +84,18 @@ pnpm dev
 
 Open <http://localhost:3000>. API probes are
 <http://127.0.0.1:3001/health> and <http://127.0.0.1:3001/ready>.
-Both report application status only; the API does not connect to PostgreSQL or
-Redis yet. `pnpm dev` starts both apps with watch/reload support. Use Ctrl+C to stop.
+`/health` reports process liveness. `/ready` checks PostgreSQL/schema/activation
+and separately reports journey capability; an empty database needs migrations and
+an activated publication. `pnpm dev` builds shared runtime modules and starts both
+apps with watch/reload support. Use Ctrl+C to stop. The API does not use Redis.
 
 No environment file is required for the default local setup. Optional examples:
 
 - [`infra/docker/.env.example`](infra/docker/.env.example): copy beside it as `.env`
   to override database credentials and infrastructure ports.
 - [`apps/api/.env.example`](apps/api/.env.example): copy beside it as `.env` to
-  override `HOST`/`PORT`; database/cache URLs are documented for later integration.
+  override listener, pool, schedule retention, deadline and walking configuration.
+  No walking endpoint is enabled by default.
 - [`workers/transit-ingest/.env.example`](workers/transit-ingest/.env.example):
   optional database URLs for the importer and isolated integration tests.
 
@@ -105,25 +107,27 @@ does not call the API and needs no URL environment variable yet.
 
 Run these from the repository root:
 
-| Command                        | Purpose                                                              |
-| ------------------------------ | -------------------------------------------------------------------- |
-| `pnpm dev`                     | Start web and API in development                                     |
-| `pnpm build`                   | Build every application/package/worker                               |
-| `pnpm lint`                    | ESLint across TypeScript and configuration files                     |
-| `pnpm typecheck`               | Check all eight workspaces, including generated Next.js types        |
-| `pnpm test`                    | Run Vitest tests across apps, packages, and workers                  |
-| `pnpm test:integration`        | Test static ingestion against local PostGIS in an isolated database  |
-| `pnpm test:router`             | Run deterministic routing fixtures and exhaustive checks             |
-| `pnpm test:journey`            | Run offline geographic and pedestrian-provider tests                 |
-| `pnpm journey:validate --help` | Show fixture, SQL candidate and configured-provider validation modes |
-| `pnpm routing:validate --help` | Show read-only database-to-router validation commands                |
-| `pnpm gtfs --help`             | Show migration/import/activation/inspection/reset commands           |
-| `pnpm format`                  | Apply Prettier formatting                                            |
-| `pnpm format:check`            | Check formatting without changing files                              |
-| `pnpm infra:config`            | Validate Docker Compose configuration                                |
-| `pnpm infra:up`                | Start PostGIS and Redis and wait for healthy status                  |
-| `pnpm infra:status`            | Show local service status                                            |
-| `pnpm infra:down`              | Stop/remove local containers; retain PostgreSQL data                 |
+| Command                            | Purpose                                                              |
+| ---------------------------------- | -------------------------------------------------------------------- |
+| `pnpm dev`                         | Start web and API in development                                     |
+| `pnpm build`                       | Build every application/package/worker                               |
+| `pnpm lint`                        | ESLint across TypeScript and configuration files                     |
+| `pnpm typecheck`                   | Check all eight workspaces, including generated Next.js types        |
+| `pnpm test`                        | Run Vitest tests across apps, packages, and workers                  |
+| `pnpm test:integration`            | Test static ingestion against local PostGIS in an isolated database  |
+| `pnpm test:router`                 | Run deterministic routing fixtures and exhaustive checks             |
+| `pnpm test:journey`                | Run offline geographic and pedestrian-provider tests                 |
+| `pnpm test:api`                    | Run offline API and schedule-lifecycle tests                         |
+| `pnpm api:validate --mode fixture` | Validate deterministic journeys through the actual API contract      |
+| `pnpm journey:validate --help`     | Show fixture, SQL candidate and configured-provider validation modes |
+| `pnpm routing:validate --help`     | Show read-only database-to-router validation commands                |
+| `pnpm gtfs --help`                 | Show migration/import/activation/inspection/reset commands           |
+| `pnpm format`                      | Apply Prettier formatting                                            |
+| `pnpm format:check`                | Check formatting without changing files                              |
+| `pnpm infra:config`                | Validate Docker Compose configuration                                |
+| `pnpm infra:up`                    | Start PostGIS and Redis and wait for healthy status                  |
+| `pnpm infra:status`                | Show local service status                                            |
+| `pnpm infra:down`                  | Stop/remove local containers; retain PostgreSQL data                 |
 
 Run the same quality gates as CI:
 
@@ -167,7 +171,7 @@ Stop local containers with `pnpm infra:down`; the database volume is preserved.
 
 ```text
 apps/web/                 Next.js + React + Tailwind shell
-apps/api/                 Fastify server and health tests
+apps/api/                 Fastify journey/metadata API and service lifecycle
 packages/domain/          Future portable transit types/invariants
 packages/gtfs/            Streaming static GTFS parsing and normalization
 packages/router/          Independent schedule-based routing and reconstruction

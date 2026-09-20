@@ -2,7 +2,8 @@
 
 Milestone 1 supplies the development foundation; Milestone 2 adds static GTFS
 ingestion; Milestone 3 adds the schedule router and its database adaptation tests;
-Milestone 4 adds geographic composition and pedestrian-provider adapters.
+Milestone 4 adds geographic composition and pedestrian-provider adapters;
+Milestone 5 adds the journey/metadata API and long-lived service lifecycle.
 All accepted ADRs remain unchanged.
 Use the [README](../README.md) for setup and root commands.
 
@@ -17,11 +18,13 @@ The API also supports independent tests; root Vitest discovery covers every work
 optional properties. Node packages use native ESM/NodeNext with explicit `.js`
 relative imports and compile into `dist/`; the web app uses Next.js's bundler
 resolution. Package exports expose only their public `dist/index` entrypoint.
-No TypeScript path aliases bypass package boundaries.
+No TypeScript path aliases bypass package boundaries. The worker additionally
+exports read-only `/runtime` modules and original `/testing` fixture helpers.
 
 The ingestion worker depends on `@dallas-transit/gtfs` and `@dallas-transit/router`
-through `workspace:*` and their public package exports. Root test/typecheck/CLI
-commands build those dependencies first. For package-local worker typecheck on a
+through `workspace:*` and their public package exports. The API consumes the worker's
+read-only runtime subpath, router types/validation and GTFS date validation. Root
+test/typecheck/dev/API CLI commands build runtime dependencies first. For package-local worker typecheck on a
 clean checkout, first run `pnpm --filter @dallas-transit/gtfs --filter @dallas-transit/router build`.
 No path alias bypasses those boundaries. GTFS record types remain in `packages/gtfs`;
 router-owned schedule and result types live in `packages/router`. Domain/shared/realtime
@@ -34,8 +37,9 @@ the worker alongside local validation tooling. The Valhalla adapter uses Node fe
 API construction is separate from socket startup, allowing Fastify injection tests
 without a port or backing services. Node loads the API's optional `.env` itself;
 tsx is used only for development TypeScript execution. Startup validates the port
-and handles SIGINT/SIGTERM with Fastify shutdown. `/ready` must grow dependency
-checks when storage connections become required; it currently means app readiness.
+and handles SIGINT/SIGTERM with Fastify shutdown. Milestone 5 adds validated pool,
+walking, cache and request-lifetime settings. `/ready` checks database, schema and
+activation capability, with walking configuration reported separately.
 
 ## Dependency choices
 
@@ -107,18 +111,18 @@ waits up to 120 seconds for healthy containers after startup. The PostGIS tag pi
 the supported major/minor family and may receive upstream patch refreshes; Redis
 pins a patch tag. No `latest` tags are used.
 
-| Variable                        | Default                                                    | Consumer                                     |
-| ------------------------------- | ---------------------------------------------------------- | -------------------------------------------- |
-| `POSTGRES_DB`                   | `dallas_transit`                                           | Compose / initial database creation          |
-| `POSTGRES_USER`                 | `dallas_dev`                                               | Compose / initial database creation          |
-| `POSTGRES_PASSWORD`             | `local_only_password`                                      | Compose / local-only credential              |
-| `POSTGRES_PORT`                 | `5432`                                                     | Compose host port                            |
-| `REDIS_PORT`                    | `6379`                                                     | Compose host port                            |
-| `HOST`                          | `127.0.0.1`                                                | API listener                                 |
-| `PORT`                          | `3001`                                                     | API listener                                 |
-| `DATABASE_URL`                  | Local Compose URL in `workers/transit-ingest/.env.example` | Static ingestion CLI                         |
-| `TEST_DATABASE_URL`             | Same local Compose URL                                     | Integration-test server; requires `CREATEDB` |
-| API `DATABASE_URL`, `REDIS_URL` | Examples in `apps/api/.env.example`                        | Still reserved by the API                    |
+| Variable            | Default                                                    | Consumer                                                 |
+| ------------------- | ---------------------------------------------------------- | -------------------------------------------------------- |
+| `POSTGRES_DB`       | `dallas_transit`                                           | Compose / initial database creation                      |
+| `POSTGRES_USER`     | `dallas_dev`                                               | Compose / initial database creation                      |
+| `POSTGRES_PASSWORD` | `local_only_password`                                      | Compose / local-only credential                          |
+| `POSTGRES_PORT`     | `5432`                                                     | Compose host port                                        |
+| `REDIS_PORT`        | `6379`                                                     | Compose host port                                        |
+| `HOST`              | `127.0.0.1`                                                | API listener                                             |
+| `PORT`              | `3001`                                                     | API listener                                             |
+| `DATABASE_URL`      | Local Compose URL in `workers/transit-ingest/.env.example` | Static ingestion CLI                                     |
+| `TEST_DATABASE_URL` | Same local Compose URL                                     | Integration-test server; requires `CREATEDB`             |
+| API `DATABASE_URL`  | Example in `apps/api/.env.example`                         | Journey/metadata connection pool; explicit in production |
 
 Changing PostgreSQL initialization variables does not change credentials inside an
 existing volume. Keep the API URL examples aligned if you customize infrastructure.
@@ -259,12 +263,49 @@ The public demo was used only for one two-call development observation, not as
 production infrastructure. See [the design](GEOGRAPHIC_JOURNEY_PLANNING.md) and
 [review](MILESTONE_4_REVIEW.md) for contracts, bounds, exact evidence and limitations.
 
+## Journey API workflow
+
+See [JOURNEY_API.md](JOURNEY_API.md) for exact contracts, errors, service-day time,
+configuration ranges, concurrency, readiness and cancellation boundaries.
+
+```sh
+pnpm infra:up
+pnpm gtfs migrate
+pnpm dev
+# Separate terminal; ordinary API tests and fixture validation are offline:
+pnpm test:api
+pnpm api:validate --mode fixture
+pnpm test:integration
+# Optional, read-only, against the retained September 18 publication:
+pnpm api:validate --mode retained-dart
+# Stop app terminals with Ctrl+C, then preserve data while stopping services:
+pnpm infra:down
+```
+
+`pnpm dev` builds the shared runtime first. For API-only development after a clean
+install, run `pnpm --filter @dallas-transit/transit-ingest... build`, then
+`pnpm --filter @dallas-transit/api dev`. Changes to worker/router sources require
+rebuilding their package outputs and restarting the API. Production-shaped local
+startup is `pnpm build`, then `pnpm --filter @dallas-transit/api start`.
+
+The normal server connects to the default local Compose database without a `.env`;
+an empty database is unready until migrated/imported/activated. It can serve health
+and metadata without walking configured, but journeys return
+`WALKING_NOT_CONFIGURED`. Configure an authorized complete Valhalla `/route` URL
+in the API's ignored `.env` for actual walking; there is no public-demo default.
+The validation CLI's explicit synthetic provider is never selected by serving config.
+
+The API adds direct declarations for existing `pg` 8.23.0 and `@types/pg` 8.23.1
+plus existing workspace links. Node has no PostgreSQL driver; the existing driver
+supplies the pool without adding an ORM or second database library. No new external
+package/version, migration, workspace or infrastructure service is added.
+
 ## Deferred work
 
 The web app includes basic metadata and a web manifest as PWA preparation only.
 Icons, service workers, offline behavior, and installability validation belong in
 the PWA milestone. Playwright is deferred until meaningful UI journeys exist.
-MapLibre, TanStack Query, API journeys, realtime, and deployments
+MapLibre, TanStack Query, realtime, and deployments
 are deferred to their own milestones. Static ingestion remains separate from the
 schedule-routing algorithm.
 

@@ -63,10 +63,13 @@ export async function planGeographicJourney(
   dependencies: {
     readonly candidates: CandidateSource;
     readonly walkingProvider?: WalkingProvider;
+    readonly signal?: AbortSignal;
   },
   overrides: Partial<GeographicPolicy> = {},
 ): Promise<GeographicPlanningResult> {
   validateGeographicRequest(request);
+  const signal = dependencies.signal;
+  signal?.throwIfAborted();
   const policy = geographicPolicy(overrides);
   const started = performance.now();
   const metrics: PlanningMetrics = {
@@ -105,7 +108,9 @@ export async function planGeographicJourney(
     request,
     policy,
     schedule.publicationId,
+    signal,
   );
+  signal?.throwIfAborted();
   if (candidates.status !== 'ok')
     return finish({ status: 'no-journey', reason: candidates.reason });
   if (candidates.publicationId !== schedule.publicationId)
@@ -158,6 +163,7 @@ export async function planGeographicJourney(
       { length: Math.min(policy.providerConcurrency, jobs.length) },
       async () => {
         for (;;) {
+          signal?.throwIfAborted();
           const index = next++;
           const job = jobs[index];
           if (!job) break;
@@ -181,6 +187,7 @@ export async function planGeographicJourney(
                     : request.destination,
               },
               policy.providerTimeoutMs,
+              signal,
             );
             metrics.providerCallMs[index] = performance.now() - callStarted;
           } else metrics.providerCallMs[index] = 0;
@@ -196,6 +203,7 @@ export async function planGeographicJourney(
     ),
   );
   metrics.providerBatchMs = performance.now() - providerStarted;
+  signal?.throwIfAborted();
   const access: WalkingCandidate[] = [];
   const egress: WalkingCandidate[] = [];
   for (let i = 0; i < jobs.length; i++) {
@@ -234,6 +242,7 @@ export async function planGeographicJourney(
     policy,
   );
   metrics.compositionMs = performance.now() - compositionStarted;
+  signal?.throwIfAborted();
   metrics.transitSearches = result.transitSearches;
   // Failed candidates might have supplied the missing transit connection.
   if (
