@@ -253,3 +253,76 @@ describe('bounded geographic orchestration', () => {
     ).rejects.toThrow(/product/);
   });
 });
+
+// Cancellation is an operational outcome, never evidence of no route.
+describe('geographic request cancellation', () => {
+  it('does no work when already canceled', async () => {
+    const f = geographicFixture();
+    const controller = new AbortController();
+    controller.abort(new Error('canceled'));
+    const find = vi.spyOn(f.candidates, 'find');
+    const walk = vi.spyOn(f.provider, 'route');
+    await expect(
+      planGeographicJourney(f.schedule, f.request, {
+        candidates: f.candidates,
+        walkingProvider: f.provider,
+        signal: controller.signal,
+      }),
+    ).rejects.toThrow('canceled');
+    expect(find).not.toHaveBeenCalled();
+    expect(walk).not.toHaveBeenCalled();
+  });
+  it('forwards the signal to candidates and stops before provider calls after candidate cancellation', async () => {
+    const f = geographicFixture();
+    const controller = new AbortController();
+    const find: CandidateSource = {
+      async find(_query, _policy, _expected, signal) {
+        expect(signal).toBe(controller.signal);
+        controller.abort(new Error('canceled'));
+        return { status: 'unavailable', reason: 'no-publication' };
+      },
+    };
+    const walk = vi.spyOn(f.provider, 'route');
+    await expect(
+      planGeographicJourney(f.schedule, f.request, {
+        candidates: find,
+        walkingProvider: f.provider,
+        signal: controller.signal,
+      }),
+    ).rejects.toThrow('canceled');
+    expect(walk).not.toHaveBeenCalled();
+  });
+  it('aborts the running provider and starts no queued calls', async () => {
+    const f = geographicFixture();
+    const controller = new AbortController();
+    let enter!: () => void;
+    const entered = new Promise<void>((resolve) => {
+      enter = resolve;
+    });
+    let callSignal: AbortSignal | undefined;
+    const provider: WalkingProvider = {
+      id: 'controlled',
+      route: vi.fn(async (_input, signal) => {
+        callSignal = signal;
+        enter();
+        return new Promise(() => {});
+      }),
+    };
+    const result = planGeographicJourney(
+      f.schedule,
+      f.request,
+      {
+        candidates: f.candidates,
+        walkingProvider: provider,
+        signal: controller.signal,
+      },
+      { providerConcurrency: 1 },
+    );
+    const rejected = expect(result).rejects.toThrow('canceled');
+    await entered;
+    controller.abort(new Error('canceled'));
+    await rejected;
+    expect(provider.route).toHaveBeenCalledTimes(1);
+    expect(callSignal?.aborted).toBe(true);
+  });
+});

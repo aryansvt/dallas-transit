@@ -35,6 +35,7 @@ export interface CandidateSource {
     request: GeographicRequest,
     policy: GeographicPolicy,
     expectedPublicationId: string,
+    signal?: AbortSignal,
   ): Promise<NearbyResult>;
 }
 
@@ -109,7 +110,7 @@ export function nearbyQueryParameters(
  * A correction after schedule loading returns publication-changed, never mixed IDs.
  */
 export function postgisCandidateSource(
-  db: Database,
+  db: Pick<Database, 'query'>,
   sourceKey: string,
 ): CandidateSource {
   if (!sourceKey.trim()) throw new Error('sourceKey must be nonempty');

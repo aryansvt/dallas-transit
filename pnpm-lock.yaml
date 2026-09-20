@@ -193,10 +193,25 @@ importers:
 
   apps/api:
     dependencies:
+      '@dallas-transit/gtfs':
+        specifier: workspace:*
+        version: link:../../packages/gtfs
+      '@dallas-transit/router':
+        specifier: workspace:*
+        version: link:../../packages/router
+      '@dallas-transit/transit-ingest':
+        specifier: workspace:*
+        version: link:../../workers/transit-ingest
       fastify:
         specifier: 5.12.5
         version: 5.12.5
+      pg:
+        specifier: 8.23.0
+        version: 8.23.0
     devDependencies:
+      '@types/pg':
+        specifier: 8.23.1
+        version: 8.23.1
       tsx:
         specifier: 4.23.13
         version: 4.23.13

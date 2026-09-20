@@ -5,7 +5,7 @@ import {
   type ScheduledTrip,
   type StopEvent,
 } from '@dallas-transit/router';
-import { isoDate } from './activation.js';
+import { parseGtfsDate } from '@dallas-transit/gtfs';
 import type { Database } from './database.js';
 
 export interface RoutingLoadOptions {
@@ -62,10 +62,12 @@ interface EventRow {
  * A repeatable-read snapshot keeps activation, services, trips and events coherent
  * even if another connection activates a correction or resets static data. */
 export async function loadRoutingSchedule(
-  db: Database,
+  db: Pick<Database, 'query'>,
   options: RoutingLoadOptions,
 ): Promise<RoutingLoadResult> {
-  const day = isoDate(options.serviceDate);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(options.serviceDate))
+    throw new Error('Expected date YYYY-MM-DD');
+  const day = parseGtfsDate(options.serviceDate.replaceAll('-', ''));
   if (
     !Number.isInteger(options.changeSeconds) ||
     options.changeSeconds < 0 ||

@@ -71,14 +71,25 @@ export async function requestWalkingRoute(
   provider: WalkingProvider,
   request: WalkingRequest,
   timeoutMs: number,
+  signal?: AbortSignal,
 ): Promise<WalkingResult> {
+  signal?.throwIfAborted();
   validateCoordinate(request.origin);
   validateCoordinate(request.destination);
   if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 30000)
     throw new Error('Invalid provider timeout');
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let onAbort: (() => void) | undefined;
   try {
+    const canceled = new Promise<never>((_, reject) => {
+      onAbort = () => {
+        reject(signal!.reason);
+        controller.abort(signal!.reason);
+      };
+      signal?.addEventListener('abort', onAbort, { once: true });
+      if (signal?.aborted) onAbort();
+    });
     const timeout = new Promise<WalkingResult>((resolve) => {
       timer = setTimeout(() => {
         // Resolve before abort listeners can reject the provider operation.
@@ -87,15 +98,21 @@ export async function requestWalkingRoute(
       }, timeoutMs);
     });
     const response = Promise.resolve()
-      .then(() => provider.route(request, controller.signal))
+      .then(() => {
+        signal?.throwIfAborted();
+        return provider.route(request, controller.signal);
+      })
       .then((value) => validateWalkingResult(value, request))
       .catch((): WalkingResult => ({
         status: 'unavailable',
         reason: 'provider-error',
       }));
-    return await Promise.race([response, timeout]);
+    const result = await Promise.race([response, timeout, canceled]);
+    signal?.throwIfAborted();
+    return result;
   } finally {
     clearTimeout(timer);
+    if (onAbort) signal?.removeEventListener('abort', onAbort);
   }
 }
 

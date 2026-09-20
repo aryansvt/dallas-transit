@@ -9,12 +9,17 @@
     "build": "tsc -p tsconfig.build.json",
     "start": "node --env-file-if-exists=.env dist/server.js",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "pnpm -w test:api"
   },
   "dependencies": {
-    "fastify": "5.12.5"
+    "fastify": "5.12.5",
+    "@dallas-transit/router": "workspace:*",
+    "@dallas-transit/gtfs": "workspace:*",
+    "@dallas-transit/transit-ingest": "workspace:*",
+    "pg": "8.23.0"
   },
   "devDependencies": {
-    "tsx": "4.23.13"
+    "tsx": "4.23.13",
+    "@types/pg": "8.23.1"
   }
 }
