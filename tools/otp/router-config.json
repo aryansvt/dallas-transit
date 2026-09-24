@@ -1,0 +1,10 @@
+{
+  "routingDefaults": {
+    "boardSlack": "0s",
+    "alightSlack": "0s",
+    "transferSlack": "120s",
+    "maxTransfers": 3,
+    "searchWindow": "2h",
+    "itineraryFilters": { "debug": "list-all" }
+  }
+}
