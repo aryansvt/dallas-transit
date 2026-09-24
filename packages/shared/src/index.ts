@@ -1,2 +1,2 @@
-// shared package interfaces will be added in their implementation milestone.
-export {};
+export * from './contracts.js';
+export * from './places.js';

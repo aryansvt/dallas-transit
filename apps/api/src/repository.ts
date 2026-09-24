@@ -11,33 +11,18 @@ import { ApiDatabase } from './database.js';
 import { ApiError } from './errors.js';
 import type { ScheduleSource } from './schedules.js';
 
-export interface StopDetails {
-  stopId: string;
-  name: string;
-  coordinate: Coordinate;
-  code: string | null;
-  platformCode: string | null;
-  parentStationId: string | null;
-}
-export interface RouteDetails {
-  routeId: string;
-  shortName: string | null;
-  longName: string | null;
-  type: number;
-  color: string | null;
-  textColor: string | null;
-  agencyTimezone: string;
-}
-export interface TripDetails {
-  tripId: string;
-  headsign: string | null;
-  directionId: number | null;
-}
-export interface References {
-  stops: StopDetails[];
-  routes: RouteDetails[];
-  trips: TripDetails[];
-}
+import type {
+  StopDetails,
+  RouteDetails,
+  TripDetails,
+  References,
+} from '@dallas-transit/shared';
+export type {
+  StopDetails,
+  RouteDetails,
+  TripDetails,
+  References,
+} from '@dallas-transit/shared';
 export interface Readiness {
   database: boolean;
   schema: boolean;

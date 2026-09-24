@@ -3,6 +3,7 @@ import {
   type WalkingProvider,
 } from '@dallas-transit/transit-ingest/runtime';
 import type { GeographicRequest } from '@dallas-transit/router';
+import type { JourneyResponse } from '@dallas-transit/shared';
 import { API_POLICY, type ApiConfig } from './config.js';
 import { ApiError } from './errors.js';
 import type { TransitRepository } from './repository.js';
@@ -39,7 +40,7 @@ export class JourneyService {
     signal: AbortSignal,
     observation: JourneyObservation,
     checkpoint = () => signal.throwIfAborted(),
-  ) {
+  ): Promise<JourneyResponse> {
     if (!this.walkingProvider) throw new ApiError('WALKING_NOT_CONFIGURED');
     for (let attempt = 0; attempt < 2; attempt++) {
       let key: string | undefined;
