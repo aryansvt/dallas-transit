@@ -28,6 +28,12 @@ import { ApiError } from './errors.js';
 import { ApiDatabase } from './database.js';
 import { postgresRepository, type TransitRepository } from './repository.js';
 import { JourneyService, type JourneyObservation } from './service.js';
+import {
+  placeQuerySchema,
+  placeResponseSchema,
+  searchPlaces,
+  type PlaceSearchProvider,
+} from './places.js';
 
 interface RequestScope {
   executing: boolean;
@@ -41,6 +47,7 @@ interface AppDependencies {
   config?: ApiConfig;
   repository?: TransitRepository;
   walkingProvider?: WalkingProvider;
+  placeProvider?: PlaceSearchProvider;
 }
 
 // Construction opens no socket. Tests inject repositories/providers, never public services.
@@ -242,6 +249,22 @@ export function buildApp(
   });
 
   app.get('/health', async () => ({ status: 'ok' }));
+  app.get<{ Querystring: { q: string } }>(
+    '/v1/places/search',
+    {
+      schema: {
+        querystring: placeQuerySchema,
+        response: { 200: placeResponseSchema, ...errors },
+      },
+    },
+    async (request, reply) => {
+      const query = request.query.q.trim();
+      if (query.length < 2) throw new ApiError('INVALID_REQUEST');
+      return execute(request, reply, reads, ({ signal }) =>
+        searchPlaces(dependencies.placeProvider, query, signal),
+      );
+    },
+  );
   app.get('/ready', async (request, reply) =>
     execute(request, reply, reads, async ({ signal }) => {
       let readiness;

@@ -402,6 +402,30 @@ untouched. No internet, DART download or public-provider credentials are needed 
 tests. Frozen install, formatting, lint, types, all regression tests, build, Compose
 and workflow validation are recorded in [the Milestone 5 review](MILESTONE_5_REVIEW.md).
 
+## M6A place-search addition
+
+`GET /v1/places/search?q=...` is a separate, provider-neutral read. Query is a
+trimmed string of 2–160 characters, with no extra fields or provider URL. Results
+are bounded to six places with `name` (1–160), optional `context` (up to 240), and
+finite numeric `latitude`/`longitude` in geographical bounds. Provider IDs/extra
+fields are stripped. A selected place needs no persistent backend identity.
+
+```json
+{ "status": "unavailable", "reason": "not-configured", "places": [] }
+```
+
+Normal startup returns that HTTP 200 capability state deliberately. An explicitly
+injected `PlaceSearchProvider.search(query, { limit, signal })` can return an array
+of public place records; success serializes `{ status: "ok", places: [...] }`.
+An empty successful array means no match. Rejection or invalid provider data
+returns `unavailable / provider-unavailable`, never fake results or private errors.
+It reuses the existing 16-read admission gate, five-second whole-request deadline,
+disconnect/shutdown signal, safe errors and no-store policy. Provider cancellation
+must cooperate; the API also stops waiting if an adapter ignores its signal.
+No database search, new SQL or migration is introduced. No external geocoder,
+terms, credentials or production fixture mode is selected. Implementing a real
+adapter is gated on human provider approval.
+
 ## Limits carried forward
 
 No walking-only result, street/transit geometry, geocoding/autocomplete, UI prose,

@@ -41,10 +41,10 @@ Use `pnpm format` to fix formatting. CI installs with `--frozen-lockfile`; inclu
 `pnpm-lock.yaml` when changing dependencies. Existing planning documents are
 excluded from the initial formatting rollout to avoid unrelated rewrites.
 
-Vitest discovers `src/**/*.test.ts` in each app, package, and worker. Start with
+Vitest discovers `src/**/*.test.{ts,tsx}` in each app, package, and worker. Start with
 small deterministic behavior tests. Run just the API tests with
-`pnpm --filter @dallas-transit/api test`. Playwright will be added when the UI
-milestone supplies a meaningful browser journey.
+`pnpm --filter @dallas-transit/api test`. Frontend behavior uses Vitest/Happy DOM
+and React DOM's `act`, without a separate browser-test framework.
 
 `pnpm test` is offline and does not need backing services. Database integration
 tests are a separate required CI gate (`pnpm test:integration`), not silently
@@ -104,6 +104,21 @@ isolated databases. `pnpm api:validate --mode fixture` exercises the complete
 offline contract; optional `--mode retained-dart` reads existing DART data with
 explicitly synthetic walks. Neither command calls a public walking service.
 Keep HTTP policy and serialization in the API, and pure routing outside it.
+
+## Frontend visual review
+
+Follow [MILESTONE_6_DESIGN.md](docs/MILESTONE_6_DESIGN.md) without inventing a new
+visual direction. Run `pnpm test:web` for behavior, not CSS snapshots. Review
+`pnpm dev:preview` at `/preview` using its state and viewport controls. Tests and
+preview must not need public providers, credentials or a DART download. The
+development route is disabled in production; synthetic fixtures never enter
+normal serving configuration. Browser and assistive-technology review remains
+necessary; DOM tests do not certify visual quality or accessibility.
+
+Milestone 6 received final human visual approval in Firefox on September 24, 2026.
+Commit, push, merge, deployment and M7 still require authorization. New map/search providers require explicit approval,
+including terms, attribution and privacy. Use targeted workspace checks while
+iterating, then run the complete milestone gates once after implementation settles.
 
 ## Transit data
 

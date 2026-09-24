@@ -1,6 +1,6 @@
-# Dallas Transit Navigator
+# LineFinder
 
-A mobile-first Dallas/DART transit navigator focused on answering:
+A mobile-first, independent Dallas/DART transit navigator focused on answering:
 
 **“I want to go there. Tell me exactly how.”**
 
@@ -8,11 +8,19 @@ The project aims to provide concrete bus/rail journey planning, transfers, live 
 
 ## Status
 
-Milestone 5 exposes static geographic journeys through `POST /v1/journeys`, with
-date-scoped stop/route/nearby reads, pooled PostgreSQL, prepared-schedule reuse,
-bounded work, cancellation and deadlines. Walking requires an explicitly configured
-service. The web app remains a placeholder. See the [API contract](docs/JOURNEY_API.md)
-and [Milestone 5 review](docs/MILESTONE_5_REVIEW.md) for validation and limitations.
+Milestone 6 implements the destination-first mobile/desktop planning flow over the
+stable M5 API. M6B refines journey instructions, introduces the working LineFinder
+brand and About page, and reduces avoidable map loading work. **Milestone 6 is
+complete and received final human visual approval in Firefox on September 24, 2026.** Read the
+[approved design](docs/MILESTONE_6_DESIGN.md) and [M6 review](docs/MILESTONE_6_REVIEW.md).
+Place search, walking, and map hosting require explicitly approved/configured
+providers. No public demos are selected automatically. A labeled, offline preview
+lets reviewers inspect every core screen without a provider or database.
+
+LineFinder is intended for eventual public use. Localhost and `/preview` are
+development/review environments; hosting and public deployment remain future work.
+The working name is not a trademark conclusion. LineFinder is not affiliated with
+or endorsed by DART. Repository and package identifiers remain `dallas-transit`.
 
 Do not rely on this project for real-world travel until a release explicitly states otherwise.
 
@@ -100,8 +108,25 @@ No environment file is required for the default local setup. Optional examples:
   optional database URLs for the importer and isolated integration tests.
 
 Defaults are **local development only**, not production credentials. Infrastructure
-ports bind to `127.0.0.1`; Redis has no password in this local setup. The web shell
-does not call the API and needs no URL environment variable yet.
+ports bind to `127.0.0.1`; Redis has no password in this local setup. The web app
+calls the API through its same-origin `/api/v1` proxy. No CORS override is needed.
+See [`apps/web/.env.example`](apps/web/.env.example) for optional API origin and
+approved map-style configuration. No public map style is enabled by default.
+
+For M6 visual review without infrastructure or external providers:
+
+```sh
+pnpm install --frozen-lockfile
+pnpm dev:preview
+```
+
+Open <http://127.0.0.1:3000/preview>. Use **Review state** and **Viewport** to inspect
+home, search, alternatives, direct/transfer/overnight detail and failure states at
+320/390/768 px or desktop width. Preview is development-only, uses synthetic
+journeys, requests no location permission and never writes saved places to storage.
+The source-free map has interactive points, not streets or route geometry. Use
+<http://127.0.0.1:3000/> for normal local mode, which requests location once after
+mount and falls back to manual origin. Geolocation needs HTTPS or localhost.
 
 ## Commands
 
@@ -118,6 +143,8 @@ Run these from the repository root:
 | `pnpm test:router`                 | Run deterministic routing fixtures and exhaustive checks             |
 | `pnpm test:journey`                | Run offline geographic and pedestrian-provider tests                 |
 | `pnpm test:api`                    | Run offline API and schedule-lifecycle tests                         |
+| `pnpm test:web`                    | Run offline frontend DOM, time, client and state tests               |
+| `pnpm dev:preview`                 | Start web-only development; open `/preview`                          |
 | `pnpm api:validate --mode fixture` | Validate deterministic journeys through the actual API contract      |
 | `pnpm journey:validate --help`     | Show fixture, SQL candidate and configured-provider validation modes |
 | `pnpm routing:validate --help`     | Show read-only database-to-router validation commands                |
@@ -170,13 +197,13 @@ Stop local containers with `pnpm infra:down`; the database volume is preserved.
 ## Repository
 
 ```text
-apps/web/                 Next.js + React + Tailwind shell
+apps/web/                 Responsive planner, journey timeline and MapLibre boundary
 apps/api/                 Fastify journey/metadata API and service lifecycle
 packages/domain/          Future portable transit types/invariants
 packages/gtfs/            Streaming static GTFS parsing and normalization
 packages/router/          Independent schedule-based routing and reconstruction
 packages/realtime/        Future realtime mapping
-packages/shared/          Future genuinely shared utilities
+packages/shared/          V1 wire contracts and minimal validated place records
 workers/transit-ingest/   Static import CLI, SQL migrations, and orchestration
 infra/docker/             Local PostGIS + Redis
 docs/                     Specification, architecture, decisions, and setup notes

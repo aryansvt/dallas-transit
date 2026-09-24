@@ -31,6 +31,7 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm test:api
+      - run: pnpm test:web
       - run: pnpm build
       - run: pnpm api:validate --mode fixture
       - run: pnpm infra:config

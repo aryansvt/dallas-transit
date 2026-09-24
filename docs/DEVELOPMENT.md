@@ -283,7 +283,7 @@ pnpm infra:down
 ```
 
 `pnpm dev` builds the shared runtime first. For API-only development after a clean
-install, run `pnpm --filter @dallas-transit/transit-ingest... build`, then
+install, run `pnpm --filter @dallas-transit/api... build`, then
 `pnpm --filter @dallas-transit/api dev`. Changes to worker/router sources require
 rebuilding their package outputs and restarting the API. Production-shaped local
 startup is `pnpm build`, then `pnpm --filter @dallas-transit/api start`.
@@ -300,13 +300,152 @@ plus existing workspace links. Node has no PostgreSQL driver; the existing drive
 supplies the pool without adding an ORM or second database library. No new external
 package/version, migration, workspace or infrastructure service is added.
 
+## M6 web and preview workflow
+
+Read [the approved design](MILESTONE_6_DESIGN.md) and
+[the human-review checkpoint](MILESTONE_6_REVIEW.md). The working LineFinder name,
+description and owner-supplied public links are centralized in
+`apps/web/src/lib/product.ts`. Package/repository identifiers are unchanged.
+
+From the repository root, in PowerShell or another shell:
+
+```sh
+pnpm install --frozen-lockfile
+pnpm dev:preview
+```
+
+Open **http://127.0.0.1:3000/preview**. This needs no API, Docker, DART data, map
+provider or credentials. The developer toolbar selects thirteen states covering all
+requested core screens; its viewport control renders the same application in an
+actual 320/390/768 px iframe, or directly at responsive desktop width. The expanded
+map can also be opened interactively. Fixture places/connections/times are synthetic;
+the MapLibre canvas contains only points with no street or path claims. Preview
+never requests geolocation or reads/writes the normal saved-place key. `/preview`
+returns 404 in a production build. Fixture modules are separate from the normal
+home import graph and absent from production client assets. Use Ctrl+C to stop the
+web terminal. State 13 adds a long destination name for wrap/large-text review.
+Open **http://127.0.0.1:3000/about** for the actual About page, using Firefox's
+Responsive Design Mode (Ctrl+Shift+M) to inspect 320, 390, 768 and 1440 px widths.
+Use 200% zoom/text enlargement as a separate manual check. The owner completed
+final M6B visual review in Firefox on September 24, 2026; DOM tests do not measure
+rendered pixel overflow.
+
+For normal local mode, use separate terminals:
+
+```sh
+# Terminal 1, infrastructure (returns once healthy)
+pnpm infra:up
+# Terminal 2, build runtime packages then start API
+pnpm --filter @dallas-transit/api... build
+pnpm --filter @dallas-transit/api dev
+# Terminal 3, start web
+pnpm --filter @dallas-transit/web dev
+```
+
+Open **http://127.0.0.1:3000/**. Alternatively, `pnpm dev` builds shared runtime
+packages and starts both applications. The retained DART data is already migrated;
+do not reimport/reset/reactivate it for frontend review. A fresh empty database
+requires the separate deliberate setup described earlier, not an M6 startup action.
+
+Normal startup requests location after mount. Browser geolocation requires HTTPS
+or trustworthy localhost; ordinary `http://<LAN-IP>` on a phone is insufficient.
+Permission denial/timeouts/storage restrictions leave manual origin available.
+Session storage records only that an attempt happened, never the coordinates.
+Reload after a prior attempt does not reprompt; use manual origin. Preview bypasses
+real permission entirely. Do not include coordinates in page URLs or screenshots
+intended for sharing.
+
+Next.js proxies `/api/v1/*` to `TRANSIT_API_ORIGIN`, default
+`http://127.0.0.1:3001`, server-side. Its incoming request logging is disabled to
+avoid logging search terms; Fastify logs templates, not raw query/body data.
+Optional web configuration goes in ignored `apps/web/.env.local` or `.env` using
+`.env.example`. Never use a secret in `NEXT_PUBLIC_MAP_STYLE_URL`: it is browser
+configuration. An approved style may reference further tiles, glyphs, sprites and
+attribution; review all those hosts. Style requests reveal viewport context to
+their hosts. Without a style, no MapLibre network request occurs and a deliberate
+map-unavailable state accompanies the complete text timeline.
+
+Normal place search calls `GET /v1/places/search?q=...`. It returns an explicit
+capability state until an approved server provider is injected into `buildApp`.
+There is intentionally no guessed environment value choosing a geocoder. Saved
+places still work as both origins and destinations. Walking remains independently
+configured via M5's approved `WALKING_VALHALLA_URL`. No configured provider is
+required for tests or preview, and none is silently selected by normal mode.
+
+```sh
+pnpm test:web
+pnpm test:api
+pnpm test
+pnpm test:router
+pnpm test:journey
+pnpm test:integration
+pnpm format:check
+pnpm lint
+pnpm typecheck
+pnpm build
+pnpm infra:config
+git diff --check
+# Ctrl+C in each app terminal, then stop backing services while retaining data:
+pnpm infra:down
+```
+
+Never use `down --volumes`. M6 changes no schema/query, retained publication or
+activation. PostGIS regression tests use and remove their own isolated databases.
+To inspect production-shaped local mode after build, use
+`pnpm --filter @dallas-transit/api start` and
+`pnpm --filter @dallas-transit/web start` in separate terminals. No deployment.
+
+### M6 dependency decisions
+
+Exact pins checked against npm on September 21–22, 2026:
+
+| Dependency                             | License      | Need and cost                                                                                                                                                                                                                                                              |
+| -------------------------------------- | ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `maplibre-gl` 6.10.0                   | BSD-3-Clause | Pre-approved interactive map engine. DOM/CSS cannot supply geographic pan/zoom, projection, tile/style rendering or attribution. About 20.6 MB installed including sources/maps; dynamically imported only when a configured/fixture map is visible. No provider included. |
+| `@tanstack/react-query` 5.102.8        | MIT          | Existing architectural choice for server state. Owns request lifecycle/cancellation, bounded ephemeral cache and query state; React alone does not provide this. Prior stable release selected to retain normal pnpm release-age checks.                                   |
+| `happy-dom` 20.14.5 (development only) | MIT          | DOM for existing Vitest/React DOM behavior tests. Node lacks browser DOM; no Playwright/browser download or additional testing-library wrapper. About 8.6 MB installed, no production bundle cost.                                                                         |
+
+MapLibre and TanStack are maintained projects already chosen in TECH_STACK.
+Primary references: [MapLibre API](https://maplibre.org/maplibre-gl-js/docs/API/classes/Map/),
+[TanStack cancellation](https://tanstack.com/query/latest/docs/framework/react/guides/query-cancellation).
+No new component library, HTTP client, date library, routing engine or global-state
+framework. `shared` now exports pure V1 types and place validation; its router import
+is types-only. API references use those types; runtime SQL/routing remains unchanged.
+Root development/test scripts build shared contracts before consumers. No pnpm
+release-age exception remains.
+
+### Efficient M6 iteration
+
+M6B changes no dependency pins or lockfile. Do not reinstall an already installed
+checkout for UI edits. After the initial runtime build, use:
+
+```sh
+# Pick the affected test file(s) instead of rebuilding every workspace:
+pnpm exec vitest run apps/web/src/components/transit-app.test.tsx
+pnpm --filter @dallas-transit/web lint
+pnpm --filter @dallas-transit/web typecheck
+```
+
+The root ESLint configuration deliberately excludes web files; use the web script.
+One web-only production build can verify a bundle change during a performance
+audit. Reserve complete repository gates, fixture validation and PostGIS tests for
+the final stable implementation; do not repeat them for CSS/copy edits. Start
+Docker once when measurements/regressions need it, and stop without deleting its
+volume. Existing final scripts rebuild some shared prerequisites independently;
+future CI can share that prerequisite stage while retaining every test suite.
+
+The M6B audit compared existing M6A production assets with the web-only build,
+counted map constructors in deterministic lifecycle tests, and timed the existing
+Fastify/pooled repository with synthetic walking. Retained data was read only; no
+EXPLAIN/index change was justified. See the review for measurements and limitations.
+
 ## Deferred work
 
 The web app includes basic metadata and a web manifest as PWA preparation only.
 Icons, service workers, offline behavior, and installability validation belong in
-the PWA milestone. Playwright is deferred until meaningful UI journeys exist.
-MapLibre, TanStack Query, realtime, and deployments
-are deferred to their own milestones. Static ingestion remains separate from the
+the PWA milestone. Browser automation infrastructure requires separate approval;
+M6 uses DOM tests and direct human/browser inspection. Realtime and deployments
+remain deferred. Static ingestion remains separate from the
 schedule-routing algorithm.
 
 GitHub Actions runs frozen install, formatting, lint, types, tests, build, and
