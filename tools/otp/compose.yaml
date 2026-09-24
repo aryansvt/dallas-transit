@@ -1,0 +1,13 @@
+name: linefinder-otp-reference
+services:
+  otp:
+    image: docker.io/opentripplanner/opentripplanner:2.7.0@sha256:640870b240ad206d05634e7a066588804c6e23abebf37cbc02b0c9ba66073486
+    environment:
+      JAVA_TOOL_OPTIONS: -Xmx3g -XX:ActiveProcessorCount=1
+    ports:
+      - '127.0.0.1:8089:8080'
+    volumes:
+      - ./build-config.json:/var/opentripplanner/build-config.json:ro
+      - ./router-config.json:/var/opentripplanner/router-config.json:ro
+      - ../../data/raw/gtfs/dart-recent.zip:/input/dart-recent.zip:ro
+    command: ['--build', '--serve']
