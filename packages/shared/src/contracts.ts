@@ -47,6 +47,9 @@ export type NoJourneyReason =
   | 'no-reachable-access-stops'
   | 'no-reachable-egress-stops'
   | 'transit-unreachable';
+export type ReplanResponse =
+  | { status: 'cooldown'; retryAfterSeconds: number }
+  | { status: 'ok'; reason: string; result: JourneyResponse };
 export type JourneyResponse = JourneyContext &
   (
     | {
@@ -54,6 +57,7 @@ export type JourneyResponse = JourneyContext &
         incomplete: boolean;
         journeys: readonly GeographicJourney[];
         references: References;
+        liveJourneyIds?: readonly string[];
       }
     | {
         status: 'no-journey';

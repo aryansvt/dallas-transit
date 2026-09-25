@@ -4,6 +4,67 @@ import type { Map as LibreMap } from 'maplibre-gl';
 import type { MapPoint } from '../lib/map-points';
 import { Dialog } from './dialog';
 import { Icon } from './icon';
+import { useLiveJourney } from './live-journey';
+import { liveClient, type TransitClient } from '../lib/api';
+
+function VehicleMarkers({
+  id,
+  client,
+  ready,
+}: {
+  id: string;
+  client: TransitClient;
+  ready: { map: LibreMap; runtime: typeof import('../lib/map-runtime') };
+}) {
+  const { data } = useLiveJourney(id, client);
+  const markers = useRef(new Map<number, import('maplibre-gl').Marker>());
+  useEffect(() => {
+    const retained = markers.current;
+    return () => {
+      retained.forEach((m) => m.remove());
+      retained.clear();
+    };
+  }, [ready]);
+  useEffect(() => {
+    const started = performance.now();
+    const active = new Set<number>();
+    for (const leg of data?.legs ?? []) {
+      const vehicle = leg.vehicle;
+      if (vehicle?.freshness !== 'LIVE' || !vehicle.coordinate) continue;
+      active.add(leg.legIndex);
+      let marker = markers.current.get(leg.legIndex);
+      if (!marker) {
+        const element = document.createElement('div');
+        element.className = 'map-marker live-vehicle';
+        element.textContent = '●';
+        element.setAttribute('aria-label', 'Selected journey vehicle');
+        marker = new ready.runtime.Marker({ element })
+          .setLngLat([
+            vehicle.coordinate.longitude,
+            vehicle.coordinate.latitude,
+          ])
+          .addTo(ready.map);
+        markers.current.set(leg.legIndex, marker);
+      } else
+        marker.setLngLat([
+          vehicle.coordinate.longitude,
+          vehicle.coordinate.latitude,
+        ]);
+    }
+    for (const [key, marker] of markers.current)
+      if (!active.has(key)) {
+        marker.remove();
+        markers.current.delete(key);
+      }
+    // Local measurement only; no location logging or analytics.
+    performance.measure('linefinder-vehicle-markers', {
+      start: started,
+      end: performance.now(),
+    });
+    performance.clearMeasures('linefinder-vehicle-markers');
+  }, [data, ready]);
+  return null;
+}
 
 function MapCanvas({
   points,
@@ -11,12 +72,16 @@ function MapCanvas({
   fixture,
   expanded,
   onExpand,
+  liveId,
+  client,
 }: {
   points: MapPoint[];
   styleUrl: string | undefined;
   fixture: boolean;
   expanded: boolean;
   onExpand(): void;
+  liveId: string | undefined;
+  client: TransitClient;
 }) {
   const container = useRef<HTMLDivElement>(null);
   const instance = useRef<LibreMap | null>(null);
@@ -133,6 +198,14 @@ function MapCanvas({
   };
   return (
     <div className={`map-canvas-wrap${expanded ? ' expanded' : ''}`}>
+      {ready && liveId && (
+        <VehicleMarkers
+          key={liveId}
+          id={liveId}
+          client={client}
+          ready={ready}
+        />
+      )}
       <div
         ref={container}
         className="map-canvas"
@@ -185,11 +258,15 @@ export function JourneyMap({
   styleUrl,
   fixture = false,
   initiallyExpanded = false,
+  liveId,
+  client = liveClient,
 }: {
   points: MapPoint[];
   styleUrl?: string;
   fixture?: boolean;
   initiallyExpanded?: boolean;
+  liveId?: string;
+  client?: TransitClient;
 }) {
   const [expanded, setExpanded] = useState(initiallyExpanded);
   const panel = useRef<HTMLElement>(null);
@@ -208,6 +285,8 @@ export function JourneyMap({
       </div>
       {!expanded ? (
         <MapCanvas
+          liveId={liveId}
+          client={client}
           points={points}
           styleUrl={styleUrl}
           fixture={fixture}
@@ -234,6 +313,8 @@ export function JourneyMap({
       {expanded && (
         <Dialog title="Journey map" wide onClose={closeMap}>
           <MapCanvas
+            liveId={liveId}
+            client={client}
             points={points}
             styleUrl={styleUrl}
             fixture={fixture}

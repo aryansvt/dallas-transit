@@ -162,13 +162,27 @@ const context = {
 };
 export const journeyResponseSchema = {
   anyOf: [
-    object({
-      ...context,
-      status: { const: 'ok' },
-      incomplete: { type: 'boolean' },
-      journeys: array(journeySchema),
-      references: referencesSchema,
-    }),
+    object(
+      {
+        ...context,
+        status: { const: 'ok' },
+        incomplete: { type: 'boolean' },
+        journeys: array(journeySchema),
+        references: referencesSchema,
+        liveJourneyIds: {
+          type: 'array',
+          maxItems: 3,
+          items: { type: 'string', format: 'uuid' },
+        },
+      },
+      [
+        ...Object.keys(context),
+        'status',
+        'incomplete',
+        'journeys',
+        'references',
+      ],
+    ),
     object({
       ...context,
       status: { const: 'no-journey' },

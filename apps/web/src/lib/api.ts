@@ -3,6 +3,9 @@ import {
   type GeographicRequest,
   type JourneyResponse,
   type PlaceSearchResponse,
+  type LiveJourney,
+  type ReplanResponse,
+  type Coordinate,
 } from '@dallas-transit/shared';
 import { validDate } from './time';
 
@@ -12,6 +15,12 @@ export class ClientError extends Error {
   }
 }
 export interface TransitClient {
+  live?(id: string, signal: AbortSignal): Promise<LiveJourney>;
+  replan?(
+    id: string,
+    input: { coordinate?: Coordinate; confirmedStopId?: string },
+    signal: AbortSignal,
+  ): Promise<ReplanResponse>;
   journeys(
     request: GeographicRequest,
     signal: AbortSignal,
@@ -100,6 +109,15 @@ export function parseJourneys(value: unknown): JourneyResponse {
     )
       return fail();
   } else if (value.status === 'ok') {
+    if (
+      value.liveJourneyIds !== undefined &&
+      (!Array.isArray(value.liveJourneyIds) ||
+        value.liveJourneyIds.length !== value.journeys.length ||
+        !value.liveJourneyIds.every(
+          (id) => typeof id === 'string' && /^[0-9a-f-]{36}$/i.test(id),
+        ))
+    )
+      return fail();
     if (
       !value.journeys.length ||
       typeof value.incomplete !== 'boolean' ||
@@ -206,7 +224,7 @@ export function parseJourneys(value: unknown): JourneyResponse {
 async function requestJson(
   path: string,
   signal: AbortSignal,
-  body?: GeographicRequest,
+  body?: object,
 ): Promise<unknown> {
   const timer = new AbortController();
   const timeout = setTimeout(() => timer.abort(), 35000);
@@ -240,6 +258,28 @@ async function requestJson(
   }
 }
 export const liveClient: TransitClient = {
+  async live(id, signal) {
+    return parseLive(
+      await requestJson(`journeys/${encodeURIComponent(id)}/live`, signal),
+    );
+  },
+  async replan(id, input, signal) {
+    const value = await requestJson(
+      `journeys/${encodeURIComponent(id)}/replan`,
+      signal,
+      input,
+    );
+    if (!record(value)) throw new ClientError('INVALID_RESPONSE');
+    if (value.status === 'cooldown' && finite(value.retryAfterSeconds))
+      return { status: 'cooldown', retryAfterSeconds: value.retryAfterSeconds };
+    if (value.status === 'ok' && text(value.reason))
+      return {
+        status: 'ok',
+        reason: value.reason,
+        result: parseJourneys(value.result),
+      };
+    throw new ClientError('INVALID_RESPONSE');
+  },
   async journeys(input, signal) {
     return parseJourneys(await requestJson('journeys', signal, input));
   },
@@ -263,3 +303,88 @@ export const liveClient: TransitClient = {
     throw new ClientError('INVALID_RESPONSE');
   },
 };
+
+export function parseLive(value: unknown): LiveJourney {
+  const states = [
+    'LIVE',
+    'AGING',
+    'STALE',
+    'SCHEDULED_FALLBACK',
+    'UNAVAILABLE',
+  ];
+  if (
+    !record(value) ||
+    !strings(value, ['publicationId', 'serviceDate']) ||
+    !validDate(String(value.serviceDate)) ||
+    !finite(value.checkedAt) ||
+    !finite(value.validUntil) ||
+    value.validUntil < value.checkedAt ||
+    value.validUntil > value.checkedAt + 45 ||
+    !states.includes(String(value.freshness)) ||
+    !Array.isArray(value.legs) ||
+    value.legs.length > 4 ||
+    !Array.isArray(value.transfers) ||
+    value.transfers.length > 3 ||
+    !Array.isArray(value.alerts) ||
+    value.alerts.length > 20 ||
+    !record(value.replan) ||
+    typeof value.replan.suggested !== 'boolean' ||
+    !Array.isArray(value.replan.reasons) ||
+    value.replan.reasons.length > 10 ||
+    !value.replan.reasons.every(text)
+  )
+    throw new ClientError('INVALID_RESPONSE');
+  for (const l of value.legs) {
+    if (
+      !record(l) ||
+      !finite(l.legIndex) ||
+      !states.includes(String(l.freshness)) ||
+      !['cancelled', 'boardingSkipped', 'alightingSkipped'].every(
+        (k) => typeof l[k] === 'boolean',
+      ) ||
+      !['departureTime', 'arrivalTime', 'updatedAt', 'stopsRemaining'].every(
+        (k) => l[k] === null || finite(l[k]),
+      ) ||
+      !(
+        l.departureDelay === null ||
+        (typeof l.departureDelay === 'number' &&
+          Number.isFinite(l.departureDelay))
+      ) ||
+      !['UPCOMING', 'DEPARTED', 'UNKNOWN'].includes(String(l.boarding))
+    )
+      throw new ClientError('INVALID_RESPONSE');
+    if (
+      l.vehicle !== null &&
+      (!record(l.vehicle) ||
+        !states.includes(String(l.vehicle.freshness)) ||
+        !(l.vehicle.coordinate === null || point(l.vehicle.coordinate)))
+    )
+      throw new ClientError('INVALID_RESPONSE');
+  }
+  if (
+    !value.transfers.every(
+      (t) =>
+        record(t) &&
+        finite(t.inboundLeg) &&
+        finite(t.outboundLeg) &&
+        finite(t.requiredSeconds) &&
+        (t.remainingSeconds === null ||
+          (typeof t.remainingSeconds === 'number' &&
+            Number.isFinite(t.remainingSeconds))) &&
+        ['FEASIBLE', 'AT_RISK', 'INFEASIBLE', 'UNKNOWN'].includes(
+          String(t.status),
+        ) &&
+        text(t.reason),
+    ) ||
+    !value.alerts.every(
+      (a) =>
+        record(a) &&
+        text(a.id) &&
+        text(a.title) &&
+        typeof a.description === 'string' &&
+        a.description.length <= 1200,
+    )
+  )
+    throw new ClientError('INVALID_RESPONSE');
+  return value as unknown as LiveJourney;
+}

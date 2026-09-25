@@ -34,6 +34,7 @@ import { JourneyMap } from './journey-map';
 import { Icon } from './icon';
 
 import { AppHeader } from './app-header';
+import { LiveJourneyPanel } from './live-journey';
 export interface PreviewSetup {
   origin: Place | null;
   destination: Place | null;
@@ -109,6 +110,8 @@ function Planner({
     input: GeographicRequest;
   } | null>(null);
   const [fixtureInitial, setFixtureInitial] = useState(true);
+  const [replacement, setReplacement] = useState<JourneyResponse | null>(null);
+  const [routeReason, setRouteReason] = useState('');
   const [selected, setSelected] = useState(preview?.detail ?? 0);
   const [detail, setDetail] = useState(preview?.detail !== undefined);
   const [message, setMessage] = useState(preview?.error ?? '');
@@ -145,11 +148,13 @@ function Planner({
     queryFn: ({ signal }) => client.journeys(request!.input, signal),
     enabled: request !== null,
   });
-  const data = search.data ?? (fixtureInitial ? preview?.data : undefined);
+  const data =
+    replacement ?? search.data ?? (fixtureInitial ? preview?.data : undefined);
   const loading = busyPreview || search.isFetching;
   const error = search.error ? errorMessage(search.error) : message;
   const result = data?.status === 'ok' ? data : undefined;
   const journey = result?.journeys[selected] ?? result?.journeys[0];
+  const liveId = detail ? result?.liveJourneyIds?.[selected] : undefined;
   const points = useMemo(
     () => journeyPoints(journey, result?.references, origin, destination),
     [journey, result?.references, origin, destination],
@@ -170,6 +175,8 @@ function Planner({
     }
   };
   const resetResults = () => {
+    setReplacement(null);
+    setRouteReason('');
     setRequest(null);
     setFixtureInitial(false);
     setDetail(false);
@@ -186,6 +193,8 @@ function Planner({
     setSearchTarget(null);
   };
   const findRoutes = () => {
+    setReplacement(null);
+    setRouteReason('');
     if (!origin) {
       originButton.current?.focus();
       setSearchTarget('origin');
@@ -487,6 +496,9 @@ function Planner({
               <p className="results-caption summary-context">
                 Scheduled · {displayDate(journey.serviceDate)} · Dallas time
               </p>
+              {routeReason && (
+                <p className="notice">Route options updated: {routeReason}</p>
+              )}
               {result.incomplete && (
                 <p className="notice">Some route options may be unavailable.</p>
               )}
@@ -496,6 +508,7 @@ function Planner({
         <div className="map-column">
           <JourneyMap
             points={points}
+            {...(liveId ? { liveId, client } : {})}
             {...(mapStyle ? { styleUrl: mapStyle } : {})}
             fixture={Boolean(preview)}
             initiallyExpanded={preview?.expanded ?? false}
@@ -503,11 +516,32 @@ function Planner({
         </div>
         {detail && journey && result && (
           <div className="instructions-column">
+            {liveId && client.live && (
+              <LiveJourneyPanel
+                key={liveId}
+                id={liveId}
+                client={client}
+                journey={journey}
+                references={result.references}
+                onReplace={(next, reason) => {
+                  manualOrigin.current = true;
+                  setOrigin({
+                    ...next.origin,
+                    name: 'Your confirmed location',
+                  });
+                  setReplacement(next);
+                  setRouteReason(reason);
+                  setSelected(0);
+                  setDetail(false);
+                }}
+              />
+            )}
             <Timeline
               journey={journey}
               references={result.references}
               destinationName={destination?.name ?? 'Your destination'}
               originName={origin?.name ?? 'Your starting point'}
+              {...(liveId ? { liveId, client } : {})}
             />
           </div>
         )}

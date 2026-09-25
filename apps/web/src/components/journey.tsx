@@ -13,6 +13,8 @@ import {
 } from '../lib/presentation';
 import { duration, serviceTime } from '../lib/time';
 import { Icon } from './icon';
+import { LiveTiming } from './live-journey';
+import { liveClient, type TransitClient } from '../lib/api';
 export function JourneyTime({
   date,
   seconds,
@@ -135,11 +137,15 @@ export function Timeline({
   references,
   destinationName,
   originName,
+  liveId,
+  client = liveClient,
 }: {
   journey: GeographicJourney;
   references: References;
   destinationName: string;
   originName: string;
+  liveId?: string;
+  client?: TransitClient;
 }) {
   return (
     <section className="timeline-section" aria-labelledby="steps-title">
@@ -261,6 +267,14 @@ export function Timeline({
                       </span>
                     )}
                   </div>
+                  {liveId && (
+                    <LiveTiming
+                      id={liveId}
+                      client={client}
+                      legIndex={i}
+                      serviceDate={journey.serviceDate}
+                    />
+                  )}
                   <div className="alight">
                     <div>
                       <strong>Get off</strong>

@@ -3,6 +3,12 @@ import {
   type WalkingProvider,
 } from '@dallas-transit/transit-ingest/runtime';
 import type { GeographicRequest } from '@dallas-transit/router';
+import {
+  adjustedSchedule,
+  scheduledBase,
+  serviceAnchor,
+  type SnapshotSource,
+} from '@dallas-transit/realtime';
 import type { JourneyResponse } from '@dallas-transit/shared';
 import { API_POLICY, type ApiConfig } from './config.js';
 import { ApiError } from './errors.js';
@@ -40,6 +46,7 @@ export class JourneyService {
     signal: AbortSignal,
     observation: JourneyObservation,
     checkpoint = () => signal.throwIfAborted(),
+    realtime?: SnapshotSource,
   ): Promise<JourneyResponse> {
     if (!this.walkingProvider) throw new ApiError('WALKING_NOT_CONFIGURED');
     for (let attempt = 0; attempt < 2; attempt++) {
@@ -57,7 +64,14 @@ export class JourneyService {
           retries: attempt,
         });
         const result = await planGeographicJourney(
-          loaded.schedule,
+          realtime
+            ? adjustedSchedule(
+                loaded.schedule,
+                realtime.current(loaded.schedule.publicationId),
+                Date.now() / 1000,
+                serviceAnchor(request.serviceDate, 'America/Chicago'),
+              )
+            : loaded.schedule,
           request,
           {
             candidates: this.repository.candidates,
@@ -86,17 +100,20 @@ export class JourneyService {
           requestedDepartureTime: request.departureTime,
         };
         if (result.status === 'ok') {
+          const baseJourneys = realtime
+            ? result.journeys.map((j) => scheduledBase(j, loaded.schedule))
+            : result.journeys;
           const refsStarted = performance.now();
           const references = await this.repository.references(
             loaded.schedule.publicationId,
-            result.journeys,
+            baseJourneys,
             signal,
           );
           observation.referenceMs = performance.now() - refsStarted;
           return {
             ...context,
             status: 'ok',
-            journeys: result.journeys,
+            journeys: baseJourneys,
             incomplete: result.incomplete,
             references,
           };

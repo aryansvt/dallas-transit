@@ -14,7 +14,11 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json && node -e \"require('node:fs').copyFileSync('src/gtfs-realtime.proto', 'dist/gtfs-realtime.proto')\"",
     "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@dallas-transit/router": "workspace:*",
+    "protobufjs": "8.2.1"
   }
 }

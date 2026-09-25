@@ -12,6 +12,7 @@
     "test": "pnpm -w test:api"
   },
   "dependencies": {
+    "@dallas-transit/realtime": "workspace:*",
     "@dallas-transit/shared": "workspace:*",
     "fastify": "5.12.5",
     "@dallas-transit/router": "workspace:*",
