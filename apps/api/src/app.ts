@@ -28,6 +28,10 @@ import { ApiError } from './errors.js';
 import { ApiDatabase } from './database.js';
 import { postgresRepository, type TransitRepository } from './repository.js';
 import { JourneyService, type JourneyObservation } from './service.js';
+import type { SnapshotSource } from '@dallas-transit/realtime';
+import { LiveJourneys } from './live.js';
+import { coordinateSchema } from './contracts.js';
+import { validateCoordinate, type Coordinate } from '@dallas-transit/router';
 import {
   placeQuerySchema,
   placeResponseSchema,
@@ -44,6 +48,9 @@ interface RequestScope {
   observation: JourneyObservation;
 }
 interface AppDependencies {
+  realtime?: SnapshotSource;
+  realtimeAgencyIds?: readonly string[];
+  now?: () => number;
   config?: ApiConfig;
   repository?: TransitRepository;
   walkingProvider?: WalkingProvider;
@@ -87,6 +94,16 @@ export function buildApp(
       ? valhallaWalkingProvider(config.walkingUrl)
       : undefined);
   const service = new JourneyService(repository, config, provider);
+  const live = new LiveJourneys(
+    service,
+    dependencies.realtime,
+    dependencies.now,
+    dependencies.realtimeAgencyIds,
+    (diagnostics) => {
+      if (Object.keys(diagnostics).length)
+        app.log.info({ diagnostics }, 'realtime identity diagnostics');
+    },
+  );
   const journeys = new Capacity(config.journeyConcurrency);
   const reads = new Capacity(16);
   const scopes = new WeakMap<FastifyRequest, RequestScope>();
@@ -103,7 +120,8 @@ export function buildApp(
     ]);
     const started = performance.now();
     const budget =
-      request.routeOptions.url === '/v1/journeys'
+      request.routeOptions.url === '/v1/journeys' ||
+      request.routeOptions.url === '/v1/journeys/:id/replan'
         ? config.journeyTimeoutMs
         : 5000;
     const timer = setTimeout(
@@ -245,6 +263,8 @@ export function buildApp(
     service.stop();
   });
   app.addHook('onClose', async () => {
+    live.clear();
+    await dependencies.realtime?.close();
     await service.close();
   });
 
@@ -304,7 +324,60 @@ export function buildApp(
         reply,
         journeys,
         ({ signal, observation, check }) =>
-          service.journey(input, signal, observation, check),
+          service.journey(input, signal, observation, check).then((result) => {
+            check();
+            return live.register(result);
+          }),
+      );
+    },
+  );
+  app.get<{ Params: { id: string } }>(
+    '/v1/journeys/:id/live',
+    {
+      schema: {
+        params: object({ id: { type: 'string', format: 'uuid' } }),
+        querystring: object({}),
+      },
+    },
+    (request, reply) =>
+      execute(request, reply, reads, ({ signal }) =>
+        live.state(request.params.id, signal),
+      ),
+  );
+  app.post<{
+    Params: { id: string };
+    Body: { coordinate?: Coordinate; confirmedStopId?: string };
+  }>(
+    '/v1/journeys/:id/replan',
+    {
+      schema: {
+        params: object({ id: { type: 'string', format: 'uuid' } }),
+        querystring: object({}),
+        body: {
+          ...object(
+            {
+              coordinate: coordinateSchema,
+              confirmedStopId: { type: 'string', minLength: 1, maxLength: 256 },
+            },
+            [],
+          ),
+          oneOf: [
+            { required: ['coordinate'] },
+            { required: ['confirmedStopId'] },
+          ],
+        },
+      },
+    },
+    (request, reply) => {
+      if (request.body.coordinate) {
+        try {
+          validateCoordinate(request.body.coordinate);
+        } catch {
+          throw new ApiError('INVALID_REQUEST');
+        }
+      }
+      return execute(request, reply, journeys, ({ signal }) =>
+        live.replan(request.params.id, request.body, signal),
       );
     },
   );

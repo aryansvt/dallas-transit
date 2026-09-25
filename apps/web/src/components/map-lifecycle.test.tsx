@@ -4,6 +4,9 @@ import { createRoot } from 'react-dom/client';
 import { afterEach, expect, it, vi } from 'vitest';
 import { JourneyMap } from './journey-map';
 import type { MapPoint } from '../lib/map-points';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { LiveJourney } from '@dallas-transit/shared';
+import { previewClient } from '../preview/fixtures';
 
 const probe = vi.hoisted(() => ({
   maps: 0,
@@ -65,6 +68,110 @@ afterEach(() => {
     markersRemoved: 0,
     positions: [],
   });
+});
+
+it('moves only the selected vehicle marker, removes stale markers, and keeps the map instance', async () => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  vi.stubGlobal(
+    'IntersectionObserver',
+    class {
+      constructor(
+        private callback: (entries: { isIntersecting: boolean }[]) => void,
+      ) {}
+      observe() {
+        this.callback([{ isIntersecting: true }]);
+      }
+      disconnect() {}
+    },
+  );
+  const cache = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: 0 } },
+  });
+  const live: LiveJourney = {
+    publicationId: 'p',
+    serviceDate: '2026-09-18',
+    checkedAt: Date.now() / 1000,
+    validUntil: Date.now() / 1000 + 45,
+    freshness: 'LIVE',
+    legs: [
+      {
+        legIndex: 1,
+        freshness: 'LIVE',
+        updatedAt: Date.now() / 1000,
+        departureTime: null,
+        arrivalTime: null,
+        departureDelay: null,
+        cancelled: false,
+        boardingSkipped: false,
+        alightingSkipped: false,
+        stopsRemaining: null,
+        boarding: 'UNKNOWN',
+        vehicle: {
+          identity: {
+            tripId: 'selected',
+            routeId: null,
+            date: null,
+            startTime: null,
+            relationship: 0,
+          },
+          vehicleId: 'v',
+          coordinate: { latitude: 32, longitude: -96 },
+          timestamp: Date.now() / 1000,
+          sequence: null,
+          stopId: null,
+          status: 'IN_TRANSIT',
+          freshness: 'LIVE',
+        },
+      },
+    ],
+    transfers: [],
+    alerts: [],
+    replan: { suggested: false, reasons: [] },
+  };
+  cache.setQueryData(['live-journey', 'selected'], live);
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  const client = { ...previewClient, live: async () => live };
+  try {
+    await act(async () =>
+      root.render(
+        <QueryClientProvider client={cache}>
+          <JourneyMap points={[]} fixture liveId="selected" client={client} />
+        </QueryClientProvider>,
+      ),
+    );
+    await act(async () => {
+      await vi.dynamicImportSettled();
+    });
+    expect(probe.maps).toBe(1);
+    await act(async () => {
+      await vi.waitFor(() => expect(probe.markers).toBe(1));
+    });
+    expect(probe.markers).toBe(1);
+    const count = probe.positions.length;
+    const moved = structuredClone(live);
+    moved.legs[0]!.vehicle!.coordinate = { latitude: 32.001, longitude: -96 };
+    await act(async () => {
+      cache.setQueryData(['live-journey', 'selected'], moved);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    expect(probe.maps).toBe(1);
+    expect(probe.markers).toBe(1);
+    expect(probe.positions.length).toBeGreaterThan(count);
+    expect(probe.positions.at(-1)).toEqual([-96, 32.001]);
+    const stale = structuredClone(moved);
+    stale.legs[0]!.vehicle!.freshness = 'STALE';
+    await act(async () => {
+      cache.setQueryData(['live-journey', 'selected'], stale);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    expect(probe.markersRemoved).toBe(1);
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    cache.clear();
+  }
 });
 
 it('updates route points without replacing the visible map and releases resources on unmount', async () => {

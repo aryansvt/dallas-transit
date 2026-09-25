@@ -10,6 +10,8 @@
     "pnpm": "12.4.2"
   },
   "scripts": {
+    "test:live": "pnpm --filter @dallas-transit/api... build && vitest run packages/realtime apps/api/src/live.test.ts apps/web/src/components/live-journey.test.tsx apps/web/src/lib/live-api.test.ts",
+    "live:benchmark": "pnpm --filter @dallas-transit/api... build && node apps/api/dist/live-validate-cli.js",
     "dev": "pnpm --filter @dallas-transit/transit-ingest... --filter @dallas-transit/shared... build \u0026\u0026 pnpm --parallel --filter @dallas-transit/web --filter @dallas-transit/api dev",
     "build": "pnpm -r build",
     "lint": "eslint . \u0026\u0026 pnpm --filter @dallas-transit/web lint",
