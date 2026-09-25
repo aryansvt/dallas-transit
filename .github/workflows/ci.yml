@@ -33,6 +33,9 @@ jobs:
       - run: pnpm test:api
       - run: pnpm test:web
       - run: pnpm build
+        env:
+          # Format-valid fixture only. Build performs no authenticated provider calls.
+          NEXT_PUBLIC_MAPBOX_TOKEN: pk.ci-build-placeholder
       - run: pnpm api:validate --mode fixture
       - run: pnpm infra:config
       - run: pnpm infra:up

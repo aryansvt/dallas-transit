@@ -1,0 +1,4 @@
+Mapbox logo: copyright and trademark Mapbox. Not covered by this repository's Apache-2.0 license.
+Unmodified SVG from the official Mapbox attribution example, retrieved 2026-09-25:
+https://docs.mapbox.com/help/dive-deeper/attribution/
+Used solely for required map attribution. No Mapbox SDK is bundled.

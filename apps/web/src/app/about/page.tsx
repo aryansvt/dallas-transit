@@ -31,10 +31,10 @@ export default function AboutPage() {
             boarding, riding, transferring and arriving.
           </p>
           <p>
-            The app includes an interactive mapping framework. Place search,
-            street maps and walking connections depend on explicitly configured
-            providers; those services are not yet connected here. Directions
-            currently use scheduled times, with no realtime tracking.
+            Configured deployments use Mapbox for place search and street maps,
+            DART schedule data for stop search, and Geoapify for walking routes.
+            Directions currently use scheduled times, with no realtime tracking
+            until authorized DART data is available.
           </p>
           <p>
             This is an application in development, intended for public use. For

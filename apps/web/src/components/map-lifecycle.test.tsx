@@ -7,6 +7,7 @@ import type { MapPoint } from '../lib/map-points';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { LiveJourney } from '@dallas-transit/shared';
 import { previewClient } from '../preview/fixtures';
+import { mapboxStyle } from '../lib/map-config';
 
 const probe = vi.hoisted(() => ({
   maps: 0,
@@ -175,6 +176,7 @@ it('moves only the selected vehicle marker, removes stale markers, and keeps the
 });
 
 it('updates route points without replacing the visible map and releases resources on unmount', async () => {
+  const style = mapboxStyle('pk.fixture')!;
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   vi.stubGlobal(
     'IntersectionObserver',
@@ -199,7 +201,15 @@ it('updates route points without replacing the visible map and releases resource
     coordinate: { latitude: 32.78, longitude: -96.8 },
   };
   try {
-    await act(async () => root.render(<JourneyMap points={[point]} fixture />));
+    await act(async () =>
+      root.render(<JourneyMap points={[point]} styleUrl={style} />),
+    );
+    expect(
+      container.querySelector('.mapbox-logo img')?.getAttribute('src'),
+    ).toBe('/mapbox-logo.svg');
+    expect(container.querySelector('.mapbox-logo')?.getAttribute('href')).toBe(
+      'https://www.mapbox.com/',
+    );
     await act(async () => {
       await vi.dynamicImportSettled();
     });
@@ -209,7 +219,7 @@ it('updates route points without replacing the visible map and releases resource
           points={[
             { ...point, coordinate: { latitude: 32.79, longitude: -96.81 } },
           ]}
-          fixture
+          styleUrl={style}
         />,
       ),
     );

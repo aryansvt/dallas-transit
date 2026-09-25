@@ -6,3 +6,5 @@ export type {
   Freshness,
   TransferRisk,
 } from '@dallas-transit/realtime';
+export * from './search.js';
+export * from './provider-http.js';

@@ -8,6 +8,8 @@ import {
   type Coordinate,
 } from '@dallas-transit/shared';
 import { validDate } from './time';
+import type { PlaceSearchSession, SearchContext } from '@dallas-transit/shared';
+import { placeSession } from './place-session';
 
 export class ClientError extends Error {
   constructor(readonly code: string) {
@@ -15,6 +17,7 @@ export class ClientError extends Error {
   }
 }
 export interface TransitClient {
+  createPlaceSession?(): PlaceSearchSession;
   live?(id: string, signal: AbortSignal): Promise<LiveJourney>;
   replan?(
     id: string,
@@ -25,7 +28,11 @@ export interface TransitClient {
     request: GeographicRequest,
     signal: AbortSignal,
   ): Promise<JourneyResponse>;
-  places(query: string, signal: AbortSignal): Promise<PlaceSearchResponse>;
+  places(
+    query: string,
+    signal: AbortSignal,
+    context?: SearchContext,
+  ): Promise<PlaceSearchResponse>;
 }
 export const errorMessage = (error: unknown): string => {
   const code = error instanceof ClientError ? error.code : 'NETWORK_ERROR';
@@ -258,6 +265,11 @@ async function requestJson(
   }
 }
 export const liveClient: TransitClient = {
+  createPlaceSession: () =>
+    placeSession(
+      (q, signal, context) => liveClient.places(q, signal, context),
+      process.env.NEXT_PUBLIC_MAPBOX_TOKEN,
+    ),
   async live(id, signal) {
     return parseLive(
       await requestJson(`journeys/${encodeURIComponent(id)}/live`, signal),
@@ -283,9 +295,9 @@ export const liveClient: TransitClient = {
   async journeys(input, signal) {
     return parseJourneys(await requestJson('journeys', signal, input));
   },
-  async places(query, signal) {
+  async places(query, signal, context) {
     const data = await requestJson(
-      `places/search?q=${encodeURIComponent(query)}`,
+      `places/search?q=${encodeURIComponent(query)}${context ? `&serviceDate=${encodeURIComponent(context.serviceDate)}${context.publicationId ? `&publicationId=${encodeURIComponent(context.publicationId)}` : ''}` : ''}`,
       signal,
     );
     if (!record(data) || !Array.isArray(data.places) || data.places.length > 6)

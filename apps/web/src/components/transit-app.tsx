@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import type { StyleSpecification } from 'maplibre-gl';
 import {
   QueryClient,
   QueryClientProvider,
@@ -22,7 +23,14 @@ import {
 } from '../lib/local-places';
 import { startupLocation } from '../lib/location';
 import { journeyPoints } from '../lib/map-points';
-import { departureAt, displayDate, duration, leaveNow } from '../lib/time';
+import {
+  departureAt,
+  displayDate,
+  duration,
+  leaveNow,
+  dallasParts,
+  shiftDate,
+} from '../lib/time';
 import {
   DepartureSheet,
   departureLabel,
@@ -53,7 +61,7 @@ export function TransitApp({
 }: {
   client?: TransitClient;
   preview?: PreviewSetup;
-  mapStyle?: string;
+  mapStyle?: string | StyleSpecification;
 }) {
   const [queryClient] = useState(
     () =>
@@ -82,7 +90,7 @@ function Planner({
 }: {
   client: TransitClient;
   preview: PreviewSetup | undefined;
-  mapStyle: string | undefined;
+  mapStyle: string | StyleSpecification | undefined;
 }) {
   const [origin, setOrigin] = useState<Place | null>(preview?.origin ?? null);
   const [destination, setDestination] = useState<Place | null>(
@@ -96,6 +104,8 @@ function Planner({
       : 'Finding your current location…',
   );
   const manualOrigin = useRef(false);
+  const [consentedLocation, setConsentedLocation] =
+    useState<Pick<Place, 'latitude' | 'longitude'>>();
   const [places, setPlaces] = useState<LocalPlaces>(
     preview?.saved ?? emptyPlaces(),
   );
@@ -127,6 +137,10 @@ function Planner({
     void startupLocation().then((result) => {
       if (!mounted || manualOrigin.current) return;
       if (result.status === 'granted') {
+        setConsentedLocation({
+          latitude: result.place.latitude,
+          longitude: result.place.longitude,
+        });
         setOrigin(result.place);
         setLocationMessage('');
       } else setLocationMessage(result.message);
@@ -456,7 +470,7 @@ function Planner({
                 <h2 ref={detailRef} tabIndex={-1} id="journey-title">
                   {destination?.name ?? 'Your destination'}
                 </h2>
-                {destination && (
+                {destination && !destination.temporary && (
                   <button
                     className={`icon-button save-button${saved ? ' is-saved' : ''}`}
                     aria-label={
@@ -547,6 +561,12 @@ function Planner({
         )}
         <footer className="app-footer">
           <p>Times are scheduled. Check signs at your stop.</p>
+          {!preview && (
+            <p>
+              Walking routes by <a href="https://www.geoapify.com/">Geoapify</a>
+              .
+            </p>
+          )}
           <details>
             <summary>About departure times</summary>
             <p>
@@ -567,6 +587,23 @@ function Planner({
       </div>
       {searchTarget && (
         <PlaceSearch
+          key={searchTarget}
+          context={{
+            serviceDate:
+              departure.mode === 'now'
+                ? dallasParts(new Date()).date
+                : departure.previousDay
+                  ? shiftDate(departure.date, -1)
+                  : departure.date,
+            ...(consentedLocation
+              ? {
+                  proximity: {
+                    latitude: consentedLocation.latitude,
+                    longitude: consentedLocation.longitude,
+                  },
+                }
+              : {}),
+          }}
           target={searchTarget}
           client={client}
           localPlaces={[...places.saved, ...places.recent]}

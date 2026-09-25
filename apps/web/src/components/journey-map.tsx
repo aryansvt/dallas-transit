@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import type { Map as LibreMap } from 'maplibre-gl';
+import Image from 'next/image';
+import type { Map as LibreMap, StyleSpecification } from 'maplibre-gl';
 import type { MapPoint } from '../lib/map-points';
 import { Dialog } from './dialog';
 import { Icon } from './icon';
@@ -76,7 +77,7 @@ function MapCanvas({
   client,
 }: {
   points: MapPoint[];
-  styleUrl: string | undefined;
+  styleUrl: string | StyleSpecification | undefined;
   fixture: boolean;
   expanded: boolean;
   onExpand(): void;
@@ -212,6 +213,23 @@ function MapCanvas({
         role="region"
         aria-label="Journey map"
       />
+      {!fixture &&
+        typeof styleUrl === 'object' &&
+        'mapbox-light' in styleUrl.sources && (
+          <a
+            className="mapbox-logo"
+            href="https://www.mapbox.com/"
+            aria-label="Mapbox"
+          >
+            <Image
+              src="/mapbox-logo.svg"
+              alt="Mapbox"
+              width={121}
+              height={30}
+              unoptimized
+            />
+          </a>
+        )}
       {(!configured || failed) && (
         <div className="map-unavailable">
           <Icon name="pin" />
@@ -262,7 +280,7 @@ export function JourneyMap({
   client = liveClient,
 }: {
   points: MapPoint[];
-  styleUrl?: string;
+  styleUrl?: string | StyleSpecification;
   fixture?: boolean;
   initiallyExpanded?: boolean;
   liveId?: string;

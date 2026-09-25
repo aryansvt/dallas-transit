@@ -1,5 +1,5 @@
 import { buildApp } from './app.js';
-import { readServerConfig } from './config.js';
+import { readServerConfig, ServerConfigurationError } from './config.js';
 import { configuredRealtime } from './realtime-config.js';
 
 async function start() {
@@ -44,9 +44,11 @@ async function start() {
 }
 try {
   await start();
-} catch {
+} catch (error) {
   console.error(
-    'API configuration or startup failed. Check server configuration.',
+    error instanceof ServerConfigurationError
+      ? error.message
+      : 'API configuration or startup failed. Check server configuration.',
   );
   process.exitCode = 1;
 }

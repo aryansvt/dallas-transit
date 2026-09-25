@@ -1,4 +1,7 @@
 export interface Place {
+  /** Temporary provider data must never enter device storage. */
+  temporary?: boolean;
+  transit?: { stopId: string; publicationId: string };
   name: string;
   context?: string;
   latitude: number;
@@ -17,6 +20,15 @@ export function isPlace(value: unknown): value is Place {
   const p = value as Partial<Place>;
   return (
     typeof p.name === 'string' &&
+    (p.temporary === undefined || typeof p.temporary === 'boolean') &&
+    (p.transit === undefined ||
+      (typeof p.transit === 'object' &&
+        p.transit !== null &&
+        typeof p.transit.stopId === 'string' &&
+        p.transit.stopId.length > 0 &&
+        p.transit.stopId.length <= 256 &&
+        typeof p.transit.publicationId === 'string' &&
+        /^[0-9a-f-]{36}$/i.test(p.transit.publicationId))) &&
     p.name.trim().length > 0 &&
     p.name.length <= 160 &&
     (p.context === undefined ||
@@ -32,6 +44,15 @@ export function isPlace(value: unknown): value is Place {
 /** Copy the public fields only; discard provider IDs, tracking fields and arbitrary JSON. */
 export function copyPlace(p: Place): Place {
   return {
+    ...(p.temporary ? { temporary: true } : {}),
+    ...(p.transit
+      ? {
+          transit: {
+            stopId: p.transit.stopId,
+            publicationId: p.transit.publicationId,
+          },
+        }
+      : {}),
     name: p.name.trim(),
     ...(p.context ? { context: p.context.trim() } : {}),
     latitude: p.latitude,

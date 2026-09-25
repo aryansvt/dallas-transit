@@ -6,16 +6,22 @@ import {
 import { abortable } from './async.js';
 import { object } from './contracts.js';
 
-/** Explicit server injection point. A real adapter/terms decision requires human approval. */
+/** Server-owned coordinate search boundary; production uses publication-scoped GTFS.
+ * External suggestions/retrieval use the provider-neutral browser session contract. */
 export interface PlaceSearchProvider {
   search(
     query: string,
     options: { limit: number; signal: AbortSignal },
   ): Promise<unknown>;
 }
-export const placeQuerySchema = object({
-  q: { type: 'string', minLength: 2, maxLength: 160 },
-});
+export const placeQuerySchema = object(
+  {
+    q: { type: 'string', minLength: 2, maxLength: 160 },
+    serviceDate: { type: 'string', format: 'date' },
+    publicationId: { type: 'string', format: 'uuid' },
+  },
+  ['q'],
+);
 export const placeResponseSchema = object(
   {
     status: { enum: ['ok', 'unavailable'] },
@@ -26,6 +32,10 @@ export const placeResponseSchema = object(
       items: object(
         {
           name: { type: 'string', minLength: 1, maxLength: 160 },
+          transit: object({
+            stopId: { type: 'string', maxLength: 256 },
+            publicationId: { type: 'string', format: 'uuid' },
+          }),
           context: { type: 'string', maxLength: 240 },
           latitude: { type: 'number', minimum: -90, maximum: 90 },
           longitude: { type: 'number', minimum: -180, maximum: 180 },
