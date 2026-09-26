@@ -9,12 +9,16 @@ import type {
 
 export const DEFAULT_GEOGRAPHIC_POLICY: GeographicPolicy = Object.freeze({
   radiusMeters: 1200,
-  maxAccessCandidates: 4,
-  maxEgressCandidates: 4,
-  maxProviderCalls: 8,
+  stationRadiusMeters: 2200,
+  shortlistLimit: 32,
+  maxWalkingDurationSeconds: 1800,
+  maxWalkingDistanceMeters: 2500,
+  maxAccessCandidates: 6,
+  maxEgressCandidates: 6,
+  maxProviderCalls: 16,
   providerConcurrency: 2,
   providerTimeoutMs: 5000,
-  maxTransitSearches: 16,
+  maxTransitSearches: 36,
   maxJourneys: 3,
 });
 
@@ -76,6 +80,10 @@ export function geographicPolicy(
   const policy = { ...DEFAULT_GEOGRAPHIC_POLICY, ...overrides };
   const maxima: GeographicPolicy = {
     radiusMeters: 5000,
+    stationRadiusMeters: 5000,
+    shortlistLimit: 64,
+    maxWalkingDurationSeconds: 3600,
+    maxWalkingDistanceMeters: 5000,
     maxAccessCandidates: 16,
     maxEgressCandidates: 16,
     maxProviderCalls: 32,
@@ -85,7 +93,7 @@ export function geographicPolicy(
     maxJourneys: 10,
   };
   for (const key of Object.keys(maxima) as (keyof GeographicPolicy)[]) {
-    integer(policy[key], key, maxima[key]);
+    integer(policy[key]!, key, maxima[key]!);
     if (policy[key] === 0) throw new Error(`${key} must be positive`);
   }
   if (

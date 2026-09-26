@@ -15,7 +15,11 @@ import {
   type Database,
 } from './database.js';
 import { importFeed } from './importer.js';
-import { postgisCandidateSource } from './nearby-stops.js';
+import {
+  postgisCandidateSource,
+  NEARBY_STOP_SQL,
+  nearbyQueryParameters,
+} from './nearby-stops.js';
 import { fixtureFiles, writeZip } from './test-support.js';
 import { loadRoutingSchedule } from './routing-schedule.js';
 import { fixtureWalkingProvider } from './walking-provider.js';
@@ -53,6 +57,20 @@ beforeAll(async () => {
     'east,004,Date line east,,0,179.9997,,,0',
     'west,005,Date line west,,0,-179.9997,,,0',
     'north,006,North pole,,89.9999,-120,,,0',
+    '',
+  ].join('\n');
+  files['stops.txt'] +=
+    'station,005,Far station,,32.139,-96.003,,,0\nfarbus,006,Far bus,,32.139,-96.003,,,0\n';
+  files['calendar_dates.txt'] += 'm9c,20260916,1\n';
+  files['trips.txt'] +=
+    'rail,m9c,m9c-rail,Station,0,,line\nbus,m9c,m9c-bus,Bus,0,,loop\n';
+  files['stop_times.txt'] += [
+    'm9c-rail,12:00:00,12:00:00,s1,1,,0,0,0,1',
+    'm9c-rail,12:30:00,12:30:00,station,2,,0,0,1,1',
+    'm9c-rail,13:00:00,13:00:00,s1,3,,0,0,2,1',
+    'm9c-bus,12:00:00,12:00:00,s1,1,,0,0,0,1',
+    'm9c-bus,12:30:00,12:30:00,farbus,2,,0,0,1,1',
+    'm9c-bus,13:00:00,13:00:00,s1,3,,0,0,2,1',
     '',
   ].join('\n');
   const archivePath = join(directory, 'original.zip');
@@ -94,7 +112,7 @@ describe('real PostGIS geographic candidates', () => {
     expect(result.status).toBe('ok');
     if (result.status !== 'ok') throw new Error();
     expect(result.access[0]?.stopId).toBe('s1');
-    expect(result.egress[0]?.stopId).toBe('s3');
+    expect(result.egress[0]?.stopId).toBe('s2');
     expect(
       [...result.access, ...result.egress].every(
         (s) => s.publicationId === publicationId,
@@ -107,16 +125,15 @@ describe('real PostGIS geographic candidates', () => {
     const narrow = await lookup(request, { radiusMeters: 1 });
     expect(narrow).toMatchObject({
       access: [{ stopId: 's1' }],
-      egress: [{ stopId: 's3' }],
+      egress: [], // s3 has no eligible Sunday service.
     });
     const limited = await lookup(request, {
-      maxAccessCandidates: 1,
-      maxEgressCandidates: 2,
+      shortlistLimit: 1,
     });
     expect(limited.status).toBe('ok');
     if (limited.status !== 'ok') throw new Error();
     expect(limited.access).toHaveLength(1);
-    expect(limited.egress).toHaveLength(2);
+    expect(limited.egress).toHaveLength(1);
     expect(limited.egress.every((s) => s.candidateDistanceMeters <= 1200)).toBe(
       true,
     );
@@ -130,10 +147,22 @@ describe('real PostGIS geographic candidates', () => {
     const b = await lookup(query);
     if (a.status !== 'ok' || b.status !== 'ok') throw new Error();
     expect(a.access).toEqual(b.access);
-    expect(a.access.map((s) => s.stopId)).toEqual(['s0', 's2', 's1', 's3']);
+    expect(a.access.map((s) => s.stopId)).toEqual(['s2', 's1']);
     expect(a.access.map((s) => s.candidateDistanceMeters)).toEqual(
       [...a.access.map((s) => s.candidateDistanceMeters)].sort((x, y) => x - y),
     );
+  });
+  it('uses a separate active rail envelope without expanding ordinary bus access', async () => {
+    const result = await lookup({ ...request, serviceDate: '2026-09-16' });
+    if (result.status !== 'ok') throw new Error();
+    expect(
+      result.access.find((s) => s.stopId === 'station')
+        ?.candidateDistanceMeters,
+    ).toBeGreaterThan(1200);
+    expect(result.access.some((s) => s.stopId === 'farbus')).toBe(false);
+    const inactive = await lookup(request);
+    if (inactive.status !== 'ok') throw new Error();
+    expect(inactive.access.some((s) => s.stopId === 'station')).toBe(false);
   });
   it('returns no candidates outside the radius', async () => {
     expect(
@@ -156,26 +185,28 @@ describe('real PostGIS geographic candidates', () => {
     });
   });
   it('handles date-line and polar candidate bounds without losing reachable geographic neighbors', async () => {
-    const result = await lookup(
-      {
-        ...request,
-        origin: { latitude: 0, longitude: 180 },
-        destination: { latitude: 90, longitude: 0 },
-      },
-      { radiusMeters: 100 },
-    );
-    if (result.status !== 'ok') throw new Error();
-    expect(result.access.map((s) => s.stopId).sort()).toEqual(['east', 'west']);
-    expect(result.egress.map((s) => s.stopId)).toEqual(['north']);
-    const opposite = await lookup(
-      { ...request, origin: { latitude: 0, longitude: -180 } },
-      { radiusMeters: 100 },
-    );
-    if (opposite.status !== 'ok') throw new Error();
-    expect(opposite.access.map((s) => s.stopId).sort()).toEqual([
-      'east',
-      'west',
-    ]);
+    // Spatial lookup remains a separate public capability; these stops have no
+    // active service and must not become journey candidates.
+    const spatial = async (point: { latitude: number; longitude: number }) =>
+      db.query<{ stopId: string }>(NEARBY_STOP_SQL, [
+        ...nearbyQueryParameters(publicationId, point, 100, 4),
+      ]);
+    expect(
+      (await spatial({ latitude: 0, longitude: 180 })).rows
+        .map((s) => s.stopId)
+        .sort(),
+    ).toEqual(['east', 'west']);
+    expect(
+      (await spatial({ latitude: 0, longitude: -180 })).rows
+        .map((s) => s.stopId)
+        .sort(),
+    ).toEqual(['east', 'west']);
+    expect(
+      (await spatial({ latitude: 90, longitude: 0 })).rows.map((s) => s.stopId),
+    ).toEqual(['north']);
+    expect(
+      await lookup({ ...request, origin: { latitude: 0, longitude: 180 } }),
+    ).toMatchObject({ access: [] });
   });
   it('does not choose an unactivated newest publication or a different source', async () => {
     expect(await lookup({ ...request, serviceDate: '2026-09-21' })).toEqual({
@@ -239,7 +270,11 @@ describe('real PostGIS geographic candidates', () => {
   });
   it('isolates corrected publication IDs and detects stale schedules', async () => {
     await activateFeed(db, correctionId, '2026-09-19', '2026-09-19');
-    const changed = { ...request, serviceDate: '2026-09-19' };
+    const changed = {
+      ...request,
+      serviceDate: '2026-09-19',
+      departureTime: 28800,
+    };
     expect(await lookup(changed)).toEqual({
       status: 'unavailable',
       reason: 'publication-changed',

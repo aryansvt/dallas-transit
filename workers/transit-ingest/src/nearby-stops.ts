@@ -15,6 +15,8 @@ export interface NearbyStop {
   readonly coordinate: Coordinate;
   /** Geodesic pruning only. Never pedestrian route length. */
   readonly candidateDistanceMeters: number;
+  readonly services?: readonly string[];
+  readonly modes?: readonly number[];
 }
 export type NearbyResult =
   | {
@@ -52,6 +54,74 @@ WHERE feed_id = $1 AND COALESCE(location_type,0) = 0
   AND ST_DWithin(geom::geography, ST_SetSRID(ST_MakePoint($2,$3),4326)::geography, $10)
 ORDER BY distance, stop_id COLLATE "C"
 LIMIT $11`;
+
+/** Spatial shortlist plus date/permission eligibility. The separate station
+ * envelope does not extend the ordinary bus search radius. */
+export const SERVICE_CANDIDATE_SQL = `
+WITH active AS MATERIALIZED (
+ SELECT service_id FROM static_gtfs.services WHERE feed_id=$1
+ AND static_gtfs.service_is_active(feed_id,service_id,$12::date)
+), spatial AS (
+ SELECT *, ST_Distance(geom::geography,ST_SetSRID(ST_MakePoint($2,$3),4326)::geography) distance
+ FROM static_gtfs.stops WHERE feed_id=$1 AND COALESCE(location_type,0)=0
+ AND (geom && ST_MakeEnvelope($4,$5,$6,$7,4326) OR geom && ST_MakeEnvelope($8,$5,$9,$7,4326))
+ AND ST_DWithin(geom::geography,ST_SetSRID(ST_MakePoint($2,$3),4326)::geography,$10)
+), eligible AS (
+ SELECT s.feed_id AS "publicationId", s.stop_id AS "stopId",s.stop_name AS name,
+ s.stop_lat::float8 latitude,s.stop_lon::float8 longitude,s.distance,
+ array_agg(DISTINCT t.route_id || ':' || COALESCE(t.direction_id::text,'?')) services,
+ array_agg(DISTINCT r.route_type) modes,
+ bool_or(r.route_type IN (0,1,2)) station
+ FROM spatial s JOIN static_gtfs.stop_times st USING(feed_id,stop_id)
+ JOIN static_gtfs.trips t USING(feed_id,trip_id)
+ JOIN active a USING(service_id) JOIN static_gtfs.routes r USING(feed_id,route_id)
+ WHERE CASE WHEN $14::boolean THEN COALESCE(st.pickup_type,0)=0 AND st.departure_time >= $13
+ ELSE COALESCE(st.drop_off_type,0)=0 AND st.arrival_time >= $13 END
+ GROUP BY s.feed_id,s.stop_id,s.stop_name,s.stop_lat,s.stop_lon,s.distance
+), ranked AS (
+ SELECT *,row_number() OVER(PARTITION BY station ORDER BY distance,"stopId" COLLATE "C") n
+ FROM eligible WHERE distance <= $15 OR station
+)
+SELECT * FROM ranked WHERE n <= CASE WHEN station THEN 2 ELSE $11 END ORDER BY distance,"stopId" COLLATE "C"`;
+
+/** Greedy service coverage: nearest first, then unseen modes, then unseen
+ * route/direction signatures. Distance and ID break ties. No route IDs are policy. */
+export function diversifyCandidates(
+  stops: readonly NearbyStop[],
+  limit: number,
+): NearbyStop[] {
+  const remaining = [...stops].sort(
+    (a, b) =>
+      a.candidateDistanceMeters - b.candidateDistanceMeters ||
+      (a.stopId < b.stopId ? -1 : 1),
+  );
+  const result: NearbyStop[] = [],
+    modes = new Set<number>(),
+    services = new Set<string>();
+  while (remaining.length && result.length < limit) {
+    let chosen = 0;
+    if (result.length)
+      for (let i = 1; i < remaining.length; i++) {
+        const score = (s: NearbyStop) => [
+          (s.modes ?? []).some((m) => !modes.has(m)) ? 1 : 0,
+          (s.modes ?? []).some((m) => [0, 1, 2].includes(m)) ? 1 : 0,
+          (s.services ?? []).filter((r) => !services.has(r)).length,
+        ];
+        const a = score(remaining[i]!),
+          b = score(remaining[chosen]!);
+        if (
+          a[0]! > b[0]! ||
+          (a[0] === b[0] && (a[1]! > b[1]! || (a[1] === b[1] && a[2]! > b[2]!)))
+        )
+          chosen = i;
+      }
+    const s = remaining.splice(chosen, 1)[0]!;
+    result.push(s);
+    for (const m of s.modes ?? []) modes.add(m);
+    for (const r of s.services ?? []) services.add(r);
+  }
+  return result;
+}
 
 /** Conservative WGS84 bounding rectangles, including poles/date-line wrapping.
  * 110000 m/degree is below the ellipsoid's minimum meridional degree length.
@@ -132,7 +202,7 @@ export function postgisCandidateSource(
             reason: publication ? 'publication-changed' : 'no-publication',
           };
         }
-        const lookup = async (coordinate: Coordinate, count: number) => {
+        const lookup = async (coordinate: Coordinate, access: boolean) => {
           const started = performance.now();
           const rows = await db.query<{
             publicationId: string;
@@ -141,30 +211,41 @@ export function postgisCandidateSource(
             latitude: number;
             longitude: number;
             distance: number;
-          }>(NEARBY_STOP_SQL, [
+            services: string[];
+            modes: number[];
+          }>(SERVICE_CANDIDATE_SQL, [
             ...nearbyQueryParameters(
               publication,
               coordinate,
-              policy.radiusMeters,
-              count,
+              Math.max(policy.radiusMeters, policy.stationRadiusMeters ?? 2200),
+              policy.shortlistLimit ?? 32,
             ),
+            request.serviceDate,
+            request.departureTime,
+            access,
+            policy.radiusMeters,
           ]);
           return {
             ms: performance.now() - started,
-            stops: rows.rows.map((row): NearbyStop => ({
-              publicationId: row.publicationId,
-              stopId: row.stopId,
-              name: row.name,
-              coordinate: { latitude: row.latitude, longitude: row.longitude },
-              candidateDistanceMeters: row.distance,
-            })),
+            stops: diversifyCandidates(
+              rows.rows.map((row): NearbyStop => ({
+                publicationId: row.publicationId,
+                stopId: row.stopId,
+                name: row.name,
+                coordinate: {
+                  latitude: row.latitude,
+                  longitude: row.longitude,
+                },
+                candidateDistanceMeters: row.distance,
+                services: row.services,
+                modes: row.modes,
+              })),
+              policy.shortlistLimit ?? 32,
+            ),
           };
         };
-        const access = await lookup(request.origin, policy.maxAccessCandidates);
-        const egress = await lookup(
-          request.destination,
-          policy.maxEgressCandidates,
-        );
+        const access = await lookup(request.origin, true);
+        const egress = await lookup(request.destination, false);
         await db.query('COMMIT');
         return {
           status: 'ok',

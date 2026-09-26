@@ -1,5 +1,22 @@
 # Journey API V1
 
+## M9C contract update
+
+Journey walking totals now include validated pedestrian interchanges. Optional
+`scheduledTransferRisk` is a non-probabilistic scheduled slack shortfall (seconds,
+lower is better). A transfer leg may carry `pedestrian: { distanceMeters,
+provenance }`; absent metadata retains legacy unmeasured-interchange semantics.
+Ranking is arrival, transfers, walking, then scheduled risk. The three-result cap
+reserves useful transfer/walking alternatives and deduplicates identical ride
+sequences rather than equal metric triples.
+
+Journey endpoint selection uses active date/time/permissions and route/direction
+coverage: ordinary radius 1200 m, separate station radius 2200 m, shortlist 32,
+up to six accepted endpoints per side, sixteen walking attempts including refill,
+36 pair searches. The separate `/stops/nearby` geographic lookup is unchanged.
+See [ADR 0005](adr/0005-routing-quality-and-pedestrian-evidence.md). Historic M5
+limits/unsupported-feature descriptions below are superseded by this update.
+
 Milestone 5 exposes static geographic planning through Fastify. The canonical
 contract is the JSON schemas in `apps/api/src/contracts.ts`, with the semantics
 below. There is no UI prose, realtime, login, deployment, distributed cache or

@@ -7,6 +7,7 @@ import {
 } from '@dallas-transit/router';
 import { parseGtfsDate } from '@dallas-transit/gtfs';
 import type { Database } from './database.js';
+import { loadPedestrianLinks, pedestrianExpiry } from './pedestrian-links.js';
 
 export interface RoutingLoadOptions {
   readonly sourceKey: string;
@@ -19,6 +20,7 @@ export type RoutingLoadResult =
   | { readonly status: 'no-publication'; readonly serviceDate: string }
   | {
       readonly status: 'loaded';
+      readonly expiresAt?: number;
       readonly schedule: RoutingSchedule;
       readonly metrics: {
         readonly extractionMs: number;
@@ -157,6 +159,8 @@ export async function loadRoutingSchedule(
       }
     }
     await db.query('CLOSE routing_events');
+    const transfers = await loadPedestrianLinks(db, feedId, day);
+    const expiresAt = await pedestrianExpiry(db, feedId, day);
     await db.query('COMMIT');
     const extractionMs = performance.now() - started;
     const buildStarted = performance.now();
@@ -169,11 +173,13 @@ export async function loadRoutingSchedule(
         changeSeconds: options.changeSeconds,
       })),
       trips,
+      transfers,
     });
     const buildMs = performance.now() - buildStarted;
     const memory = process.memoryUsage();
     return {
       status: 'loaded',
+      ...(expiresAt === undefined ? {} : { expiresAt }),
       schedule,
       metrics: {
         extractionMs,

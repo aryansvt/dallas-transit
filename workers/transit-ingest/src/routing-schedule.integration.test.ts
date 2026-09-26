@@ -3,6 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { publishPedestrianEvidence } from './pedestrian-links.js';
 import { route } from '@dallas-transit/router';
 import { activateFeed } from './activation.js';
 import {
@@ -221,6 +222,39 @@ describe('database-to-router boundary', () => {
       status: 'ok',
       journeys: [{ publicationId: correction.feedId, arrivalTime: 30000 }],
     });
+  });
+  it('loads only the publication/date-scoped directed evidence and rejects overwrite or missing retention permission', async () => {
+    const evidence = {
+      publicationId: originalId,
+      evidenceId: 'synthetic-v1',
+      rightsReference: 'test-generated synthetic data',
+      validFrom: '2026-09-17',
+      validThrough: '2026-09-17',
+      retainUntil: '2099-01-01T00:00:00Z',
+      links: [
+        {
+          id: 'synthetic',
+          fromStopId: 's1',
+          toStopId: 's2',
+          durationSeconds: 30,
+          pedestrian: { distanceMeters: 40, provenance: 'synthetic' },
+        },
+      ],
+    };
+    await expect(
+      publishPedestrianEvidence(db, { ...evidence, rightsReference: '' }),
+    ).rejects.toThrow(/permission/);
+    await publishPedestrianEvidence(db, evidence);
+    expect((await load('2026-09-17')).schedule.transfers).toEqual(
+      evidence.links,
+    );
+    expect((await load('2026-09-20')).schedule.transfers).toEqual([]);
+    expect((await load('2026-09-19')).schedule.transfers).toEqual([]); // corrected feed
+    await expect(publishPedestrianEvidence(db, evidence)).rejects.toThrow();
+    expect((await load('2026-09-17')).schedule.transfers).toEqual(
+      evidence.links,
+    );
+    await migrate(db); // applied migrations are immutable and repeat safely
   });
   it('rolls back a failed read and leaves its client usable', async () => {
     const otherName = `routing_empty_${randomUUID().replaceAll('-', '')}`;

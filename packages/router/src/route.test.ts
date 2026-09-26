@@ -27,6 +27,9 @@ describe('direct journeys and reconstruction', () => {
     );
     expect(journeys(schedule)).toEqual([
       {
+        walkingDurationSeconds: 0,
+        walkingDistanceMeters: 0,
+        scheduledTransferRisk: 0,
         publicationId: 'fixture-v1',
         serviceDate: day,
         originStopId: 'A',

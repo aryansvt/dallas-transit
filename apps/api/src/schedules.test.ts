@@ -191,3 +191,28 @@ describe('prepared schedule lifecycle', () => {
     });
   });
 });
+
+it('expires a cached schedule at its evidence deadline before the ordinary TTL', async () => {
+  const f = fixture();
+  let now = 0;
+  const source = {
+    ...f.source,
+    load: vi.fn(async () => ({
+      schedule: f.schedule,
+      preparationMs: 0,
+      expiresAt: 10,
+    })),
+  };
+  const cache = new PreparedSchedules(
+    source,
+    { sourceKey: 'fixture', changeSeconds: 120, maximum: 2, ttlMs: 1000 },
+    () => now,
+  );
+  expect((await cache.get(f.date, f.signal)).cache).toBe('miss');
+  now = 9;
+  expect((await cache.get(f.date, f.signal)).cache).toBe('hit');
+  now = 10;
+  expect((await cache.get(f.date, f.signal)).cache).toBe('miss');
+  await cache.close();
+  await f.cache.close();
+});

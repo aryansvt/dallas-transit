@@ -58,7 +58,11 @@ describe('static ingestion on real PostgreSQL/PostGIS', () => {
           'SELECT name FROM public.transit_schema_migrations ORDER BY name',
         )
       ).rows.map((row) => row.name),
-    ).toEqual(['001_static_gtfs.sql', '002_stop_search.sql']);
+    ).toEqual([
+      '001_static_gtfs.sql',
+      '002_stop_search.sql',
+      '003_pedestrian_interchanges.sql',
+    ]);
     expect(
       (
         await db.query<{ version: string }>(
@@ -483,7 +487,11 @@ describe('static ingestion on real PostgreSQL/PostGIS', () => {
           'SELECT name FROM public.transit_schema_migrations ORDER BY name',
         )
       ).rows.map((row) => row.name),
-    ).toEqual(['001_static_gtfs.sql', '002_stop_search.sql']);
+    ).toEqual([
+      '001_static_gtfs.sql',
+      '002_stop_search.sql',
+      '003_pedestrian_interchanges.sql',
+    ]);
   });
   it('serializes concurrent identical imports into one complete publication', async () => {
     const connection = new URL(

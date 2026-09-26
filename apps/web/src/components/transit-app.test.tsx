@@ -2,6 +2,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { Timeline } from './journey';
 import { TransitApp } from './transit-app';
 import {
   previewClient,
@@ -219,19 +220,19 @@ it('groups the journey summary and actions without announcing decorative divider
   const summary = container.querySelector('.detail-summary')!;
   expect(
     summary.querySelector('[aria-label="Transit route sequence"]')?.textContent,
-  ).toContain('RED');
+  ).toContain('Red Line');
   expect(
     summary.querySelector('[aria-label="Transit route sequence"]')?.textContent,
-  ).toContain('BLUE');
+  ).toContain('Blue Line');
   expect(summary.textContent).toContain('Total trip');
   expect(summary.textContent).toContain('1 transfer');
   expect(summary.textContent).toContain('Scheduled');
   const steps = [...container.querySelectorAll('.timeline > li')];
   expect(steps.map((step) => step.querySelector('h3')?.textContent)).toEqual([
     'Walk to West End Station',
-    'Board RED',
+    'Board Red Line',
     'Transfer at Akard Station',
-    'Board BLUE',
+    'Board Blue Line',
     `Walk to ${previewDestination.name}`,
     previewDestination.name,
   ]);
@@ -278,3 +279,34 @@ it.each([320, 390, 768, 1440])(
     ).toBe('About');
   },
 );
+
+it('renders measured interchange walking and explains a same-route vehicle change', async () => {
+  const response = previewResponse();
+  const base = response.journeys[0]!;
+  const rides = base.legs.filter((l) => l.kind === 'transit');
+  const first = rides[0]!,
+    second = { ...rides[1]!, routeId: first.routeId };
+  const transfer = {
+    kind: 'transfer' as const,
+    transferId: 'synthetic',
+    fromStopId: first.alightingStopId,
+    toStopId: second.boardingStopId,
+    departureTime: first.arrivalTime,
+    arrivalTime: first.arrivalTime + 120,
+    pedestrian: { distanceMeters: 150, provenance: 'synthetic' },
+  };
+  const journey = { ...base, legs: [first, transfer, second] };
+  await act(async () =>
+    root.render(
+      <Timeline
+        journey={journey}
+        references={response.references}
+        originName="Origin"
+        destinationName="Destination"
+      />,
+    ),
+  );
+  expect(container.textContent).toContain('Walk to');
+  expect(container.textContent).toContain('150 m');
+  expect(container.textContent).toContain('Change vehicles: board');
+});

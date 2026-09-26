@@ -1,4 +1,4 @@
-import { route } from './route.js';
+import { routeToStops } from './route.js';
 import { compareIds, integer } from './validation.js';
 import {
   geographicPolicy,
@@ -17,7 +17,7 @@ import type {
 import type { RoutingSchedule } from './types.js';
 
 /** Pure composition: walking routes have already been obtained and validated.
- * Separate pair queries keep each pair's walking cost constant under M3 dominance.
+ * Each access candidate has an independent search shared across egress targets.
  * Never merge access labels before transit search: later access can mean less walk.
  */
 export function composeGeographicJourneys(
@@ -26,6 +26,10 @@ export function composeGeographicJourneys(
   access: readonly WalkingCandidate[],
   egress: readonly WalkingCandidate[],
   overrides: Partial<GeographicPolicy> = {},
+  explain?: (
+    journey: GeographicJourney,
+    decision: 'dominated' | 'same-rides' | 'limit' | 'retained',
+  ) => void,
 ): GeographicCompositionResult {
   validateGeographicRequest(request);
   const policy = geographicPolicy(overrides);
@@ -87,22 +91,25 @@ export function composeGeographicJourneys(
   if (!egress.length) return none('no-reachable-egress-stops');
   let transitSearches = 0;
   const composed: GeographicJourney[] = [];
-  for (const a of access)
-    for (const e of egress) {
-      // M3 same-stop queries return zero legs. Walking-only alternatives are deferred.
-      if (a.stopId === e.stopId) continue;
-      transitSearches++;
-      const result = route(schedule, {
+  for (const a of access) {
+    const targets = egress.filter((e) => e.stopId !== a.stopId);
+    const results = routeToStops(
+      schedule,
+      {
         serviceDate: request.serviceDate,
         originStopId: a.stopId,
-        destinationStopId: e.stopId,
         departureTime: Math.ceil(
           request.departureTime + a.walk.durationSeconds,
         ),
         ...(request.maxTransfers === undefined
           ? {}
           : { maxTransfers: request.maxTransfers }),
-      });
+      },
+      targets.map((e) => e.stopId),
+    );
+    for (const e of targets) {
+      transitSearches++; // logical pairs; timetable scanning is shared per access
+      const result = results.get(e.stopId)!;
       if (result.status !== 'ok') continue;
       for (const transit of result.journeys) {
         const arrivalTime = transit.arrivalTime + e.walk.durationSeconds;
@@ -121,8 +128,14 @@ export function composeGeographicJourneys(
           boardingCount: transit.boardingCount,
           transferCount: transit.transferCount,
           walkingDurationSeconds:
-            a.walk.durationSeconds + e.walk.durationSeconds,
-          walkingDistanceMeters: a.walk.distanceMeters + e.walk.distanceMeters,
+            a.walk.durationSeconds +
+            transit.walkingDurationSeconds +
+            e.walk.durationSeconds,
+          walkingDistanceMeters:
+            a.walk.distanceMeters +
+            transit.walkingDistanceMeters +
+            e.walk.distanceMeters,
+          scheduledTransferRisk: transit.scheduledTransferRisk,
           interchangeDurationSeconds: transit.legs.reduce(
             (sum, leg) =>
               sum +
@@ -153,15 +166,18 @@ export function composeGeographicJourneys(
         });
       }
     }
+  }
   // Pareto filtering retains a later arrival if it saves transfers or walking.
   // The walking criterion is duration only; distance is reported, not scored.
   const dominates = (a: GeographicJourney, b: GeographicJourney) =>
     a.arrivalTime <= b.arrivalTime &&
     a.transferCount <= b.transferCount &&
     a.walkingDurationSeconds <= b.walkingDurationSeconds &&
+    (a.scheduledTransferRisk ?? 0) <= (b.scheduledTransferRisk ?? 0) &&
     (a.arrivalTime < b.arrivalTime ||
       a.transferCount < b.transferCount ||
-      a.walkingDurationSeconds < b.walkingDurationSeconds);
+      a.walkingDurationSeconds < b.walkingDurationSeconds ||
+      (a.scheduledTransferRisk ?? 0) < (b.scheduledTransferRisk ?? 0));
   const key = (j: GeographicJourney) =>
     JSON.stringify([j.accessStopId, j.egressStopId, j.legs]);
   composed.sort(
@@ -169,23 +185,49 @@ export function composeGeographicJourneys(
       a.arrivalTime - b.arrivalTime ||
       a.transferCount - b.transferCount ||
       a.walkingDurationSeconds - b.walkingDurationSeconds ||
+      (a.scheduledTransferRisk ?? 0) - (b.scheduledTransferRisk ?? 0) ||
       compareIds(key(a), key(b)),
   );
+  // Endpoint variants of the same actual rides are one rider journey. Different
+  // services remain distinct even when their aggregate objectives are identical.
+  const identity = (j: GeographicJourney) =>
+    JSON.stringify(
+      j.legs.filter((l) => l.kind === 'transit').map((l) => l.tripId),
+    );
   const seen = new Set<string>();
-  const journeys = composed
-    .filter((j) => {
-      if (composed.some((other) => dominates(other, j))) return false;
-      // One canonical representative for equivalent ranking metrics.
-      const metrics = JSON.stringify([
-        j.arrivalTime,
-        j.transferCount,
-        j.walkingDurationSeconds,
-      ]);
-      if (seen.has(metrics)) return false;
-      seen.add(metrics);
-      return true;
-    })
-    .slice(0, policy.maxJourneys);
+  const frontier = composed.filter((j) => {
+    if (composed.some((other) => dominates(other, j))) {
+      explain?.(j, 'dominated');
+      return false;
+    }
+    const id = identity(j);
+    if (seen.has(id)) {
+      explain?.(j, 'same-rides');
+      return false;
+    }
+    seen.add(id);
+    return true;
+  });
+  // Preserve the fastest, then useful transfer/walking extremes before filling.
+  // Sorting the selected subset restores the locked rider-facing order.
+  const selected = new Set<GeographicJourney>();
+  if (frontier[0]) selected.add(frontier[0]);
+  for (const metric of ['transferCount', 'walkingDurationSeconds'] as const) {
+    if (selected.size >= policy.maxJourneys || !frontier.length) break;
+    const candidate = [...frontier].sort(
+      (a, b) =>
+        a[metric] - b[metric] || frontier.indexOf(a) - frontier.indexOf(b),
+    )[0]!;
+    selected.add(candidate);
+  }
+  for (const j of frontier) {
+    if (selected.size >= policy.maxJourneys) break;
+    selected.add(j);
+  }
+  const journeys = frontier.filter((j) => {
+    explain?.(j, selected.has(j) ? 'retained' : 'limit');
+    return selected.has(j);
+  });
   return journeys.length
     ? { status: 'ok', journeys, transitSearches }
     : none('transit-unreachable', transitSearches);

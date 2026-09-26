@@ -8,25 +8,29 @@ The project aims to provide concrete bus/rail journey planning, transfers, live 
 
 ## Status
 
-M9B adds local production-deployment preparation for Vercel and Render. See the
-[deployment runbook](docs/DEPLOYMENT.md) and [M9B review](docs/MILESTONE_9B_REVIEW.md).
-No cloud resources have been created or public release approved by this milestone.
+Schedule-based DART trip planning is deployed at
+[LineFinder](https://linefinder-dart.vercel.app). It uses our TypeScript RAPTOR-style
+router, DART static schedules, Geoapify endpoint walking, and Mapbox search/maps.
+DART realtime is **disabled**; realtime infrastructure is experimental and does
+not establish access to a permitted live feed.
 
-Milestone 6 implements the destination-first mobile/desktop planning flow over the
-stable M5 API. M6B refines journey instructions, introduces the working LineFinder
-brand and About page, and reduces avoidable map loading work. **Milestone 6 is
-complete and received final human visual approval in Firefox on September 24, 2026.** Read the
-[approved design](docs/MILESTONE_6_DESIGN.md) and [M6 review](docs/MILESTONE_6_REVIEW.md).
-Place search, walking, and map hosting require explicitly approved/configured
-providers. No public demos are selected automatically. A labeled, offline preview
-lets reviewers inspect every core screen without a provider or database.
+M9C improves candidate coverage, validated pedestrian interchanges, walking totals,
+scheduled transfer-risk ordering and alternatives. These changes are local pending
+review and deployment. See [M9C evidence and limitations](docs/MILESTONE_9C_REVIEW.md)
+and the [deployment runbook](docs/DEPLOYMENT.md).
 
-LineFinder is intended for eventual public use. Localhost and `/preview` are
-development/review environments; hosting and public deployment remain future work.
-The working name is not a trademark conclusion. LineFinder is not affiliated with
-or endorsed by DART. Repository and package identifiers remain `dallas-transit`.
+Known limits: an inter-stop walking connection needs validated publication-scoped
+evidence; proximity alone never creates one. Search uses bounded candidates and
+walking budgets. Direct walking-only planning and automatic adjacent-service-day
+search are not implemented. For after-midnight trips, use the previous service-day
+option where appropriate. Maps show places/stops, not route polylines. Scheduled
+connections are not live predictions; check DART service notices before travel.
 
-Do not rely on this project for real-world travel until a release explicitly states otherwise.
+LineFinder is independent and is not affiliated with or endorsed by DART.
+Static-feed use/redistribution, provider-derived walking retention, hosting
+retention/backups and operating budgets remain owner checks. Repository licensing
+is Apache-2.0; it does not grant rights to third-party datasets. The working name
+is not a trademark conclusion. `/preview` remains a local review environment.
 
 ## Core technical goals
 
@@ -206,7 +210,7 @@ apps/api/                 Fastify journey/metadata API and service lifecycle
 packages/domain/          Future portable transit types/invariants
 packages/gtfs/            Streaming static GTFS parsing and normalization
 packages/router/          Independent schedule-based routing and reconstruction
-packages/realtime/        Future realtime mapping
+packages/realtime/        Experimental realtime mapping (DART live access disabled)
 packages/shared/          V1 wire contracts and minimal validated place records
 workers/transit-ingest/   Static import CLI, SQL migrations, and orchestration
 infra/docker/             Local PostGIS + Redis

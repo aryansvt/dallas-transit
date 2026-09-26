@@ -32,6 +32,11 @@ export interface TransferLink {
   readonly fromStopId: string;
   readonly toStopId: string;
   readonly durationSeconds: number;
+  /** Present only for a validated complete pedestrian path, not a generic interchange. */
+  readonly pedestrian?: {
+    readonly distanceMeters: number;
+    readonly provenance: string;
+  };
 }
 
 export interface ScheduleInput {
@@ -94,6 +99,7 @@ export interface TransferLeg {
   readonly toStopId: string;
   readonly departureTime: number;
   readonly arrivalTime: number;
+  readonly pedestrian?: TransferLink['pedestrian'];
 }
 
 export type JourneyLeg = TransitLeg | TransferLeg;
@@ -109,6 +115,10 @@ export interface Journey {
   readonly durationSeconds: number;
   readonly boardingCount: number;
   readonly transferCount: number;
+  readonly walkingDurationSeconds: number;
+  readonly walkingDistanceMeters: number;
+  /** Sum of seconds missing from a five-minute spare connection allowance. Lower is better. */
+  readonly scheduledTransferRisk: number;
   readonly legs: readonly JourneyLeg[];
 }
 

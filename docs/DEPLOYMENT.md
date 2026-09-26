@@ -1,9 +1,9 @@
 # LineFinder deployment and operations
 
-M9B prepares the repository only. All account, billing, credential, domain and
-deployment actions below are **owner steps**, after review. Do not enable DART
-realtime. No Docker, Redis, persistent API disk, Turborepo, or cloud CLI is needed
-for this schedule-only deployment. Native Node serves the existing pnpm workspace.
+M9B is deployed at https://linefinder-dart.vercel.app. Render runs the native
+Node API in Ohio; Vercel serves the web app. DART realtime remains disabled.
+The settings below reconcile the owner's successful deployment. M9C changes are
+local until separately approved; no deployment is implied by this document.
 
 ## 1. Render project and database
 
@@ -21,9 +21,10 @@ name='postgis';`. Migration 001 enables it; inability to enable it blocks releas
 
 Manual configuration is intentional: paid plan labels/prices and dataset memory
 requirements are not pinned by an unverified Blueprint. The owner records the
-selected compute/storage plans in their private operations notes. Start the API
-with at least 2 GB RAM as an initial sizing assumption, then confirm peak RSS with
-real feed planning before release; this is not a measured capacity guarantee.
+selected compute/storage plans in their private operations notes. The retained API tier is $7/month, 0.5 CPU / 512 MB. Owner-observed M9B manual
+route load was roughly 180-190 MB steady and 230-250 MB peak. These measurements
+are not a future capacity guarantee. Re-measure M9C candidate/search changes,
+cold starts, both cached service dates and concurrent requests before deployment.
 [Render regions](https://render.com/docs/regions),
 [Postgres creation/TLS/access](https://render.com/docs/postgresql-creating-connecting),
 [PostGIS support](https://render.com/docs/postgresql-extensions),
@@ -33,20 +34,23 @@ real feed planning before release; this is not a measured capacity guarantee.
 
 Create a **Web Service**, connected to the GitHub repository, in the same project:
 
-| Setting            | Value                                                                                                                                                     |
-| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Name               | `linefinder-api`                                                                                                                                          |
-| Runtime            | Node (native)                                                                                                                                             |
-| Region             | Ohio                                                                                                                                                      |
-| Branch             | `main`, only after separately approved merge and green CI                                                                                                 |
-| Root Directory     | Empty (repository root)                                                                                                                                   |
-| Instance           | Owner-selected paid always-on instance; one instance                                                                                                      |
-| Build command      | `corepack enable && corepack prepare pnpm@12.4.2 --activate && pnpm install --frozen-lockfile --prod=false && pnpm --filter @dallas-transit/api... build` |
-| Start command      | `node apps/api/dist/server.js`                                                                                                                            |
-| Pre-deploy command | Empty; migrations are an explicit operator step                                                                                                           |
-| Health Check Path  | `/health` for first bootstrap; `/ready` after activation                                                                                                  |
-| Auto-Deploy        | Off during bootstrap; **After CI Checks Pass** afterward                                                                                                  |
-| Persistent disk    | None                                                                                                                                                      |
+| Setting            | Value                                                                                       |
+| ------------------ | ------------------------------------------------------------------------------------------- |
+| Name               | `linefinder-api`                                                                            |
+| Runtime            | Node (native)                                                                               |
+| Region             | Ohio                                                                                        |
+| Branch             | `main`, only after separately approved merge and green CI                                   |
+| Root Directory     | Empty (repository root)                                                                     |
+| Instance           | Current $7 / 0.5 CPU / 512 MB paid instance; one instance                                   |
+| Build command      | `pnpm install --frozen-lockfile --prod=false && pnpm --filter @dallas-transit/api... build` |
+| Start command      | `node apps/api/dist/server.js`                                                              |
+| Pre-deploy command | Empty; migrations are an explicit operator step                                             |
+| Health Check Path  | `/ready` (bootstrap completed)                                                              |
+| Auto-Deploy        | **After CI Checks Pass**                                                                    |
+| Persistent disk    | None                                                                                        |
+
+`corepack enable` failed on Render because `/usr/bin/pnpm` was read-only. The
+build command above is the observed successful command.
 
 Set environment values privately in Render (never repository files):
 
@@ -85,7 +89,7 @@ node workers/transit-ingest/dist/cli.js inspect --source dart
 ```
 
 The migration runner serializes changes with a transaction/advisory lock, applies
-001, 002 and future numbered SQL files once, and records hashes. Repeating migrate
+001, 002, 003 and future numbered SQL files once, and records hashes. Repeating migrate
 is safe; changed applied migrations fail. Check `SELECT postgis_version();` and
 `SELECT name FROM public.transit_schema_migrations ORDER BY name;` in the database
 console. Do not edit applied SQL or use reset to resolve a failure.
@@ -125,17 +129,17 @@ liveness but return unready. Nothing migrates, imports or deletes on API start.
 
 Owner creates/imports the repository as a Vercel project, after CI succeeds:
 
-| Dashboard setting                    | Exact value                                                                                                |
-| ------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
-| Framework Preset                     | Next.js                                                                                                    |
-| Root Directory                       | `apps/web`                                                                                                 |
-| Include files outside Root Directory | Enabled                                                                                                    |
-| Node.js Version                      | 24.x (must satisfy repository engines)                                                                     |
-| Install Command                      | `cd ../.. && corepack enable && corepack prepare pnpm@12.4.2 --activate && pnpm install --frozen-lockfile` |
-| Build Command                        | `cd ../.. && pnpm --filter @dallas-transit/web... build`                                                   |
-| Output Directory                     | Framework default (`.next`)                                                                                |
-| Production Branch                    | `main`                                                                                                     |
-| Functions                            | Keep duration >= 60 seconds; proxy exports `maxDuration = 60`                                              |
+| Dashboard setting                    | Exact value                                                   |
+| ------------------------------------ | ------------------------------------------------------------- |
+| Framework Preset                     | Next.js                                                       |
+| Root Directory                       | `apps/web`                                                    |
+| Include files outside Root Directory | Enabled                                                       |
+| Node.js Version                      | 24.x (must satisfy repository engines)                        |
+| Install Command                      | `cd ../.. && pnpm install --frozen-lockfile`                  |
+| Build Command                        | `cd ../.. && pnpm --filter @dallas-transit/web... build`      |
+| Output Directory                     | Framework default (`.next`)                                   |
+| Production Branch                    | `main`                                                        |
+| Functions                            | Keep duration >= 60 seconds; proxy exports `maxDuration = 60` |
 
 No `vercel.json` or repository restructuring is required. Verify the package
 manager/version in the first build log. Vercel uses the existing monorepo lockfile
@@ -149,6 +153,9 @@ Production environment variables (build **and** runtime):
 - `TRANSIT_API_ORIGIN`: `https://<api>.onrender.com`, no path/query/credentials.
 - `TRANSIT_PROXY_KEY`: same private shared secret as Render; **no NEXT_PUBLIC prefix**.
 - `NEXT_TELEMETRY_DISABLED=1`.
+- `ENABLE_EXPERIMENTAL_COREPACK=1` enables the pinned pnpm@12.4.2 install.
+
+These settings are scoped to **Production only**, not Preview or Development.
 
 Never put `DATABASE_URL` or `GEOAPIFY_API_KEY` in Vercel. Browser transit traffic
 stays at `/api/v1/*`; Next forwards only fixed routes to the server-configured
@@ -165,8 +172,9 @@ promote that configuration. Local `pnpm dev` retains loopback and optional crede
 `/preview` remains development-only. Turn off the Vercel toolbar when checking CSP;
 no third-party toolbar scripts are allowed by the production policy.
 
-After the final web domain exists, the owner updates Mapbox allowed URLs for that
-exact origin (and separately authorized preview/local origins), redeploys if the
+The deployed Mapbox public token is restricted to
+`https://linefinder-dart.vercel.app`. When the domain changes, the owner updates
+allowed URLs for that exact origin (and separately authorized preview/local origins), redeploys if the
 public token changed, and checks search/map attribution and CSP in the browser.
 Do not broadly allow all `*.vercel.app`. No provider term acceptance is implied.
 
@@ -230,5 +238,20 @@ There is no offline journey guarantee, API/provider cache or location cache adde
 M9C must separately approve static-feed access/use and provider account terms,
 chosen plans and budgets, backup/restore and suspend retention, real HTTPS/CSP and
 device installation/accessibility checks, actual feed memory/latency, external
-uptime checks, and public-release wording. M9B creates no resources and performs
-none of those external actions.
+uptime checks, and public-release wording. M9B deployment has completed; these remaining owner checks are not certified by
+that successful deployment. The transient-map-error fix `c7ecaec152c1c9eda7f4b6919b0604162f4ccd15` is deployed.
+
+## M9C rollout prerequisites (not performed by the implementation pass)
+
+Apply additive migration `003_pedestrian_interchanges.sql` before deploying the
+M9C API; `/ready` checks its ledger/table. An empty graph is valid and leaves
+inter-stop pedestrian transfers unavailable. It does not fabricate links.
+
+Evidence preparation is separate from schedule import. Review pedestrian source,
+walkability, publication stop IDs, valid dates, rights reference and retention
+expiry before publishing an immutable graph. Restart/warm the API after adding
+evidence to avoid serving its old empty graph from cache. Never copy the six
+session-only Geoapify benchmark measurements into production automatically.
+Retention cleanup must remove links then their graph in an owner-authorized
+transaction by the stated deadline; a deadline column is not a deletion job.
+See ADR 0005 and the M9C review. No network-wide provider job is approved.
