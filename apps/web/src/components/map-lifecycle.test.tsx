@@ -15,6 +15,7 @@ const probe = vi.hoisted(() => ({
   markers: 0,
   markersRemoved: 0,
   positions: [] as number[][],
+  listeners: new Map<string, Set<() => void>>(),
 }));
 vi.mock('maplibre-gl', () => ({
   Map: class {
@@ -22,7 +23,14 @@ vi.mock('maplibre-gl', () => ({
       probe.maps++;
     }
     addControl() {}
-    on() {}
+    on(event: string, listener: () => void) {
+      const listeners = probe.listeners.get(event) ?? new Set();
+      listeners.add(listener);
+      probe.listeners.set(event, listeners);
+    }
+    off(event: string, listener: () => void) {
+      probe.listeners.get(event)?.delete(listener);
+    }
     fitBounds() {}
     jumpTo() {}
     resize() {}
@@ -68,7 +76,73 @@ afterEach(() => {
     markers: 0,
     markersRemoved: 0,
     positions: [],
+    listeners: new Map(),
   });
+});
+
+it.each([
+  { name: 'shows a successfully loaded map', events: ['load'], failed: false },
+  {
+    name: 'keeps a loaded map visible after transient source errors',
+    events: ['load', 'error', 'error'],
+    failed: false,
+  },
+  {
+    name: 'shows the failure fallback for an initial style failure',
+    events: ['error'],
+    failed: true,
+  },
+  {
+    name: 'clears an initial error when loading recovers',
+    events: ['error', 'load'],
+    failed: false,
+  },
+])('$name', async ({ events, failed }) => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  vi.stubGlobal(
+    'IntersectionObserver',
+    class {
+      constructor(
+        private callback: (entries: { isIntersecting: boolean }[]) => void,
+      ) {}
+      observe() {
+        this.callback([{ isIntersecting: true }]);
+      }
+      disconnect() {}
+    },
+  );
+  const container = document.createElement('div');
+  const root = createRoot(container);
+  try {
+    await act(async () =>
+      root.render(
+        <JourneyMap points={[]} styleUrl={mapboxStyle('pk.fixture')!} />,
+      ),
+    );
+    await act(async () => {
+      await vi.dynamicImportSettled();
+    });
+    expect(probe.listeners.get('load')?.size).toBe(1);
+    expect(probe.listeners.get('error')?.size).toBe(1);
+    for (const event of events) {
+      await act(async () => {
+        probe.listeners.get(event)?.forEach((listener) => listener());
+      });
+    }
+    expect(container.textContent?.includes('The map could not load')).toBe(
+      failed,
+    );
+    expect(
+      Boolean(container.querySelector('[aria-label="Fit journey on map"]')),
+    ).toBe(!failed);
+    expect(probe.maps).toBe(1);
+    expect(probe.disposed).toBe(0);
+  } finally {
+    await act(async () => root.unmount());
+  }
+  expect(probe.listeners.get('load')?.size).toBe(0);
+  expect(probe.listeners.get('error')?.size).toBe(0);
+  expect(probe.disposed).toBe(1);
 });
 
 it('moves only the selected vehicle marker, removes stale markers, and keeps the map instance', async () => {

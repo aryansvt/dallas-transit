@@ -134,9 +134,22 @@ function MapCanvas({
             refreshExpiredTiles: false,
           });
           instance.current = map;
+          let initiallyLoaded = false;
+          const onLoad = () => {
+            if (disposed) return;
+            initiallyLoaded = true;
+            setFailed(false);
+          };
+          const onError = () => {
+            // Unlike map.loaded(), this stays true while new tiles load on pan/zoom.
+            // Recoverable source errors must not hide an already usable map.
+            if (!disposed && !initiallyLoaded) setFailed(true);
+          };
           const resize = new ResizeObserver(() => map.resize());
           cleanup = () => {
             resize.disconnect();
+            map.off('load', onLoad);
+            map.off('error', onError);
             map.remove();
             instance.current = null;
           };
@@ -144,7 +157,8 @@ function MapCanvas({
             new NavigationControl({ showCompass: false }),
             'top-left',
           );
-          map.on('error', () => setFailed(true));
+          map.on('load', onLoad);
+          map.on('error', onError);
           resize.observe(container.current);
           setFailed(false);
           setReady({ map, runtime });
@@ -152,7 +166,9 @@ function MapCanvas({
           setFailed(true);
         }
       })
-      .catch(() => setFailed(true));
+      .catch(() => {
+        if (!disposed) setFailed(true);
+      });
     return () => {
       disposed = true;
       cleanup();
