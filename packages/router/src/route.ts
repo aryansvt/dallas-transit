@@ -203,11 +203,19 @@ export function routeToStops(
     };
     for (const p of [...marked].sort((a, b) => a - b)) {
       const pattern = schedule.patterns[p]!;
+      // Trips in a pattern share stop occurrences. Serialize signature fragments
+      // once per occurrence pair, rather than for every label on every trip.
+      const rideKeys = new Map<number, string>();
+      const boardingKeys = new Map<number, string>();
       for (const ti of pattern.tripIndexes) {
         const trip = schedule.trips[ti]!,
           tripStops = index.tripStops[ti]!;
-        const onboard: { label: Label; occurrence: number; risk: number }[] =
-          [];
+        const onboard: {
+          label: Label;
+          occurrence: number;
+          risk: number;
+          identity: string;
+        }[] = [];
         for (
           let occurrence = 0;
           occurrence < trip.events.length;
@@ -218,6 +226,17 @@ export function routeToStops(
           if (event.dropOff === 0 && event.arrival !== null)
             for (const boarding of onboard) {
               const boarded = trip.events[boarding.occurrence]!;
+              const pair =
+                boarding.occurrence * trip.events.length + occurrence;
+              let rideKey = rideKeys.get(pair);
+              if (rideKey === undefined) {
+                rideKey = JSON.stringify([
+                  trip.routeId,
+                  boarded.stopId,
+                  event.stopId,
+                ]);
+                rideKeys.set(pair, rideKey);
+              }
               const label: Label = {
                 time: event.arrival,
                 previous: boarding.label,
@@ -226,9 +245,7 @@ export function routeToStops(
                 risk: boarding.risk,
                 boardings: round,
                 linkState: 'none',
-                identity:
-                  boarding.label.identity +
-                  JSON.stringify([trip.routeId, boarded.stopId, event.stopId]),
+                identity: boarding.label.identity + rideKey,
                 leg: {
                   kind: 'transit',
                   tripId: trip.id,
@@ -265,8 +282,12 @@ export function routeToStops(
             if (bounded(event.departure, round, label.walking, risk)) continue;
             // All onboard states now have identical future event times. Compare
             // walking/risk, not boarding time; retain distinct equal signatures.
-            const identity =
-              label.identity + JSON.stringify([trip.routeId, event.stopId]);
+            let boardingKey = boardingKeys.get(occurrence);
+            if (boardingKey === undefined) {
+              boardingKey = JSON.stringify([trip.routeId, event.stopId]);
+              boardingKeys.set(occurrence, boardingKey);
+            }
+            const identity = label.identity + boardingKey;
             if (
               onboard.some(
                 (b) =>
@@ -274,12 +295,7 @@ export function routeToStops(
                   b.risk <= risk &&
                   (b.label.walking < label.walking ||
                     b.risk < risk ||
-                    b.label.identity +
-                      JSON.stringify([
-                        trip.routeId,
-                        trip.events[b.occurrence]!.stopId,
-                      ]) ===
-                      identity),
+                    b.identity === identity),
               )
             )
               continue;
@@ -291,7 +307,7 @@ export function routeToStops(
                   risk < onboard[i]!.risk)
               )
                 onboard.splice(i, 1);
-            onboard.push({ label, occurrence, risk });
+            onboard.push({ label, occurrence, risk, identity });
           }
         }
       }

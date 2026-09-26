@@ -3,6 +3,8 @@ import process from 'node:process';
 import console from 'node:console';
 import { URL } from 'node:url';
 import { performance } from 'node:perf_hooks';
+import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { planGeographicJourney } from '../workers/transit-ingest/dist/geographic-planner.js';
 /** Local-only release diagnostics. Never imported by HTTP handlers.
  * Optional --validate-walks makes exactly six sequential Geoapify calls, no retry
@@ -170,6 +172,9 @@ try {
     );
   }
   if (args.has('--perf')) {
+    assert.equal(candidates.status, 'ok');
+    assert(candidates.access.slice(0, 6).some((s) => s.stopId === '33598'));
+    assert(candidates.egress.slice(0, 6).some((s) => s.stopId === '33597'));
     const synthetic = buildSchedule({
       ...schedule,
       transfers: [
@@ -195,32 +200,64 @@ try {
         },
       ],
     });
+    for (const [originStopId, destinationStopId, expected] of [
+      ['34287', '18216', ['232', '236', '227']],
+      ['33157', '33597', ['244', 'SILVER']],
+    ]) {
+      const result = route(synthetic, {
+        ...request,
+        originStopId,
+        destinationStopId,
+      });
+      assert.equal(result.status, 'ok');
+      const sequences = summarize(result).map((j) =>
+        j.routes.map((r) => r.toUpperCase()),
+      );
+      assert(
+        sequences.some(
+          (routes) => JSON.stringify(routes) === JSON.stringify(expected),
+        ),
+        JSON.stringify(sequences),
+      );
+    }
     for (const view of [schedule, synthetic]) {
-      const result = await planGeographicJourney(
-        view,
-        request,
-        {
-          candidates: postgisCandidateSource(db, 'dart'),
-          walkingProvider: {
-            id: 'synthetic-performance-only',
-            async route(r) {
-              return {
-                status: 'ok',
-                route: { ...r, durationSeconds: 300, distanceMeters: 400 },
-              };
+      let signature;
+      for (let sample = 0; sample < 3; sample++) {
+        const result = await planGeographicJourney(
+          view,
+          request,
+          {
+            candidates: postgisCandidateSource(db, 'dart'),
+            walkingProvider: {
+              id: 'synthetic-performance-only',
+              async route(r) {
+                return {
+                  status: 'ok',
+                  route: { ...r, durationSeconds: 300, distanceMeters: 400 },
+                };
+              },
             },
           },
-        },
-        API_POLICY,
-      );
-      console.log(
-        'PERFORMANCE ONLY: synthetic walking, not travel evidence',
-        JSON.stringify({
-          links: view.transfers.length,
-          metrics: result.metrics,
-          rss: process.memoryUsage().rss,
-        }),
-      );
+          API_POLICY,
+        );
+        assert.equal(result.status, 'ok');
+        assert(result.journeys.length <= 3);
+        const digest = createHash('sha256')
+          .update(JSON.stringify(result.journeys))
+          .digest('hex');
+        if (signature) assert.equal(digest, signature);
+        signature = digest;
+        console.log(
+          'PERFORMANCE ONLY: synthetic walking, not travel evidence',
+          JSON.stringify({
+            links: view.transfers.length,
+            sample,
+            signature,
+            metrics: result.metrics,
+            rss: process.memoryUsage().rss,
+          }),
+        );
+      }
     }
   }
   if (args.has('--validate-walks')) {

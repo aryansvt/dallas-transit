@@ -29,6 +29,14 @@ export interface PlanningMetrics {
   compositionMs: number;
   totalMs: number;
 }
+export interface PlanningProgress {
+  readonly stage: 'candidates' | 'walking' | 'composition' | 'complete';
+  readonly candidateMs: number;
+  readonly providerMs: number;
+  readonly compositionMs: number;
+  readonly providerCalls: number;
+  readonly completedAccessSearches: number;
+}
 export interface WalkingAttempt {
   readonly phase: 'access' | 'egress';
   readonly stopId: string;
@@ -62,6 +70,9 @@ export async function planGeographicJourney(
     readonly candidates: CandidateSource;
     readonly walkingProvider?: WalkingProvider;
     readonly signal?: AbortSignal;
+    /** Aggregate-only checkpoints, including before cancellation is rethrown. */
+    readonly onProgress?: (progress: PlanningProgress) => void;
+    readonly checkpoint?: () => void;
   },
   overrides: Partial<GeographicPolicy> = {},
 ): Promise<GeographicPlanningResult> {
@@ -84,190 +95,284 @@ export async function planGeographicJourney(
   };
   let candidates: NearbyResult | null = null;
   const walkingAttempts: WalkingAttempt[] = [];
-  const finish = (
-    result:
-      | GeographicCompositionResult
-      | { status: 'no-journey'; reason: NoJourneyReason },
-  ): GeographicPlanningResult => {
-    metrics.totalMs = performance.now() - started;
-    return {
-      ...result,
-      metrics,
-      candidates,
-      walkingAttempts,
-      incomplete: walkingAttempts.some(
-        (a) => a.result.status === 'unavailable',
-      ),
+  let stage: PlanningProgress['stage'] = 'candidates';
+  let stageStarted = started;
+  let completedAccessSearches = 0;
+  const publish = () =>
+    dependencies.onProgress?.({
+      stage,
+      candidateMs: metrics.originLookupMs + metrics.destinationLookupMs,
+      providerMs: metrics.providerBatchMs,
+      compositionMs: metrics.compositionMs,
+      providerCalls: metrics.providerCalls,
+      completedAccessSearches,
+    });
+  const progress = () => {
+    publish();
+    dependencies.checkpoint?.();
+  };
+  const onAbort = () => {
+    if (stage === 'walking')
+      metrics.providerBatchMs = performance.now() - stageStarted;
+    if (stage === 'composition')
+      metrics.compositionMs = performance.now() - stageStarted;
+    publish();
+  };
+  signal?.addEventListener('abort', onAbort, { once: true });
+  try {
+    const finish = (
+      result:
+        | GeographicCompositionResult
+        | { status: 'no-journey'; reason: NoJourneyReason },
+    ): GeographicPlanningResult => {
+      metrics.totalMs = performance.now() - started;
+      stage = 'complete';
+      progress();
+      return {
+        ...result,
+        metrics,
+        candidates,
+        walkingAttempts,
+        incomplete: walkingAttempts.some(
+          (a) => a.result.status === 'unavailable',
+        ),
+      };
     };
-  };
-  if (schedule.serviceDate !== request.serviceDate)
-    return finish({ status: 'no-journey', reason: 'service-date-not-loaded' });
-  candidates = await dependencies.candidates.find(
-    request,
-    policy,
-    schedule.publicationId,
-    signal,
-  );
-  signal?.throwIfAborted();
-  if (candidates.status !== 'ok')
-    return finish({ status: 'no-journey', reason: candidates.reason });
-  if (candidates.publicationId !== schedule.publicationId)
-    throw new Error('Candidate publication mismatch');
-  if (
-    candidates.access.length > (policy.shortlistLimit ?? 32) ||
-    candidates.egress.length > (policy.shortlistLimit ?? 32)
-  )
-    throw new Error('Candidate source exceeded policy');
-  const stopIds = new Set(schedule.stops.map((s) => s.id));
-  for (const group of [candidates.access, candidates.egress]) {
-    const seen = new Set<string>();
-    for (const c of group) {
-      validateCoordinate(c.coordinate);
-      if (
-        c.publicationId !== schedule.publicationId ||
-        !stopIds.has(c.stopId) ||
-        seen.has(c.stopId) ||
-        !Number.isFinite(c.candidateDistanceMeters) ||
-        c.candidateDistanceMeters < 0 ||
-        c.candidateDistanceMeters >
-          Math.max(policy.radiusMeters, policy.stationRadiusMeters ?? 2200)
-      )
-        throw new Error('Invalid nearby candidate');
-      seen.add(c.stopId);
-    }
-  }
-  metrics.originLookupMs = candidates.originLookupMs;
-  metrics.destinationLookupMs = candidates.destinationLookupMs;
-  metrics.accessCandidates = candidates.access.length;
-  metrics.egressCandidates = candidates.egress.length;
-  if (!candidates.access.length)
-    return finish({ status: 'no-journey', reason: 'no-nearby-access-stops' });
-  if (!candidates.egress.length)
-    return finish({ status: 'no-journey', reason: 'no-nearby-egress-stops' });
-  const provider = dependencies.walkingProvider;
-  if (!provider)
-    return finish({
-      status: 'no-journey',
-      reason: 'walking-provider-unavailable',
-    });
-  const access: WalkingCandidate[] = [],
-    egress: WalkingCandidate[] = [];
-  const providerStarted = performance.now();
-  let timedOut = false;
-  const phaseAttempts: WalkingAttempt[][] = [[], []];
-  const runPhase = async (phase: 'access' | 'egress', phaseIndex: number) => {
-    const selected = phase === 'access' ? access : egress;
-    const target =
-      phase === 'access'
-        ? policy.maxAccessCandidates
-        : policy.maxEgressCandidates;
-    // Reserve each endpoint's initial allocation; divide the remaining refill
-    // budget deterministically so response timing cannot change selection.
-    const extra =
-      policy.maxProviderCalls -
-      policy.maxAccessCandidates -
-      policy.maxEgressCandidates;
-    const budget =
-      target +
-      (phaseIndex === 0 ? Math.ceil(extra / 2) : Math.floor(extra / 2));
-    for (const stop of candidates!.status === 'ok' ? candidates![phase] : []) {
-      if (
-        selected.length >= target ||
-        phaseAttempts[phaseIndex]!.length >= budget
-      )
-        break;
-      signal?.throwIfAborted();
-      const started = performance.now();
-      let result: WalkingResult = { status: 'unavailable', reason: 'timeout' };
-      if (!timedOut) {
-        metrics.providerCalls++;
-        result = await requestWalkingRoute(
-          provider,
-          {
-            origin: phase === 'access' ? request.origin : stop.coordinate,
-            destination:
-              phase === 'access' ? stop.coordinate : request.destination,
-          },
-          policy.providerTimeoutMs,
-          signal,
-        );
-      }
-      metrics.providerCallMs.push(performance.now() - started);
-      if (result.status === 'unavailable' && result.reason === 'timeout')
-        timedOut = true;
-      let overBudget = false;
-      if (
-        result.status === 'ok' &&
-        (result.route.durationSeconds >
-          (policy.maxWalkingDurationSeconds ?? 1800) ||
-          result.route.distanceMeters >
-            (policy.maxWalkingDistanceMeters ?? 2500))
-      ) {
-        overBudget = true;
-        result = { status: 'no-route' };
-      }
-      phaseAttempts[phaseIndex]!.push({
-        phase,
-        stopId: stop.stopId,
-        result,
-        ...(result.status === 'ok'
-          ? {}
-          : {
-              rejection: overBudget
-                ? 'walking-budget'
-                : result.status === 'unavailable'
-                  ? 'provider-unavailable'
-                  : 'no-pedestrian-route',
-            }),
+    if (schedule.serviceDate !== request.serviceDate)
+      return finish({
+        status: 'no-journey',
+        reason: 'service-date-not-loaded',
       });
-      if (result.status === 'ok')
-        selected.push({ ...stop, walk: result.route });
-    }
-  };
-  if (policy.providerConcurrency === 1) {
-    await runPhase('access', 0);
-    await runPhase('egress', 1);
-  } else await Promise.all([runPhase('access', 0), runPhase('egress', 1)]);
-  walkingAttempts.push(...phaseAttempts.flat());
-  metrics.providerBatchMs = performance.now() - providerStarted;
-  signal?.throwIfAborted();
-  for (const [phase, reachable] of [
-    ['access', access],
-    ['egress', egress],
-  ] as const) {
-    if (reachable.length) continue;
-    // Mixed no-route and outage responses cannot prove that nothing is reachable.
-    const unavailable = walkingAttempts.some(
-      (a) => a.phase === phase && a.result.status === 'unavailable',
+    candidates = await dependencies.candidates.find(
+      request,
+      policy,
+      schedule.publicationId,
+      signal,
     );
-    return finish({
-      status: 'no-journey',
-      reason: unavailable
-        ? 'walking-provider-unavailable'
-        : phase === 'access'
-          ? 'no-reachable-access-stops'
-          : 'no-reachable-egress-stops',
+    signal?.throwIfAborted();
+    if (candidates.status !== 'ok')
+      return finish({ status: 'no-journey', reason: candidates.reason });
+    if (candidates.publicationId !== schedule.publicationId)
+      throw new Error('Candidate publication mismatch');
+    if (
+      candidates.access.length > (policy.shortlistLimit ?? 32) ||
+      candidates.egress.length > (policy.shortlistLimit ?? 32)
+    )
+      throw new Error('Candidate source exceeded policy');
+    const stopIds = new Set(schedule.stops.map((s) => s.id));
+    for (const group of [candidates.access, candidates.egress]) {
+      const seen = new Set<string>();
+      for (const c of group) {
+        validateCoordinate(c.coordinate);
+        if (
+          c.publicationId !== schedule.publicationId ||
+          !stopIds.has(c.stopId) ||
+          seen.has(c.stopId) ||
+          !Number.isFinite(c.candidateDistanceMeters) ||
+          c.candidateDistanceMeters < 0 ||
+          c.candidateDistanceMeters >
+            Math.max(policy.radiusMeters, policy.stationRadiusMeters ?? 2200)
+        )
+          throw new Error('Invalid nearby candidate');
+        seen.add(c.stopId);
+      }
+    }
+    metrics.originLookupMs = candidates.originLookupMs;
+    metrics.destinationLookupMs = candidates.destinationLookupMs;
+    metrics.accessCandidates = candidates.access.length;
+    metrics.egressCandidates = candidates.egress.length;
+    progress();
+    if (!candidates.access.length)
+      return finish({ status: 'no-journey', reason: 'no-nearby-access-stops' });
+    if (!candidates.egress.length)
+      return finish({ status: 'no-journey', reason: 'no-nearby-egress-stops' });
+    const provider = dependencies.walkingProvider;
+    if (!provider)
+      return finish({
+        status: 'no-journey',
+        reason: 'walking-provider-unavailable',
+      });
+    const access: WalkingCandidate[] = [],
+      egress: WalkingCandidate[] = [];
+    const providerStarted = performance.now();
+    stage = 'walking';
+    stageStarted = providerStarted;
+    progress();
+    let timedOut = false;
+    const phaseAttempts: WalkingAttempt[][] = [[], []];
+    const phases = (['access', 'egress'] as const).map((phase, phaseIndex) => {
+      const target =
+        phase === 'access'
+          ? policy.maxAccessCandidates
+          : policy.maxEgressCandidates;
+      // Reserve each endpoint's initial allocation; divide the remaining refill
+      // budget deterministically so response timing cannot change selection.
+      const extra =
+        policy.maxProviderCalls -
+        policy.maxAccessCandidates -
+        policy.maxEgressCandidates;
+      const budget =
+        target +
+        (phaseIndex === 0 ? Math.ceil(extra / 2) : Math.floor(extra / 2));
+      return {
+        phase,
+        phaseIndex,
+        target,
+        budget,
+        selected: phase === 'access' ? access : egress,
+        stops: candidates!.status === 'ok' ? candidates![phase] : [],
+        next: 0,
+      };
     });
+    try {
+      while (true) {
+        // Reserve in shortlist order, alternating endpoints. A wave never exceeds
+        // either the global concurrency limit or an endpoint's remaining slots.
+        const wave: {
+          state: (typeof phases)[number];
+          stop: (typeof phases)[number]['stops'][number];
+        }[] = [];
+        const reserved = [0, 0];
+        while (wave.length < policy.providerConcurrency) {
+          let added = false;
+          for (const state of phases) {
+            const { phaseIndex, selected, target, budget, stops } = state;
+            if (wave.length >= policy.providerConcurrency) break;
+            if (
+              selected.length + reserved[phaseIndex]! >= target ||
+              state.next >= budget ||
+              state.next >= stops.length
+            )
+              continue;
+            wave.push({ state, stop: stops[state.next++]! });
+            reserved[phaseIndex]!++;
+            added = true;
+          }
+          if (!added) break;
+        }
+        if (!wave.length) break;
+        signal?.throwIfAborted();
+        const results = await Promise.all(
+          wave.map(async ({ state, stop }) => {
+            const { phase } = state;
+            const started = performance.now();
+            let result: WalkingResult = {
+              status: 'unavailable',
+              reason: 'timeout',
+            };
+            if (!timedOut) {
+              metrics.providerCalls++;
+              publish();
+              result = await requestWalkingRoute(
+                provider,
+                {
+                  origin: phase === 'access' ? request.origin : stop.coordinate,
+                  destination:
+                    phase === 'access' ? stop.coordinate : request.destination,
+                },
+                policy.providerTimeoutMs,
+                signal,
+              );
+            }
+            metrics.providerCallMs.push(performance.now() - started);
+            return result;
+          }),
+        );
+        // Commit in reservation order, never in provider completion order.
+        for (const [i, { state, stop }] of wave.entries()) {
+          const { phase, phaseIndex, selected } = state;
+          let result = results[i]!;
+          if (result.status === 'unavailable' && result.reason === 'timeout')
+            timedOut = true;
+          let overBudget = false;
+          if (
+            result.status === 'ok' &&
+            (result.route.durationSeconds >
+              (policy.maxWalkingDurationSeconds ?? 1800) ||
+              result.route.distanceMeters >
+                (policy.maxWalkingDistanceMeters ?? 2500))
+          ) {
+            overBudget = true;
+            result = { status: 'no-route' };
+          }
+          phaseAttempts[phaseIndex]!.push({
+            phase,
+            stopId: stop.stopId,
+            result,
+            ...(result.status === 'ok'
+              ? {}
+              : {
+                  rejection: overBudget
+                    ? 'walking-budget'
+                    : result.status === 'unavailable'
+                      ? 'provider-unavailable'
+                      : 'no-pedestrian-route',
+                }),
+          });
+          if (result.status === 'ok')
+            selected.push({ ...stop, walk: result.route });
+        }
+        metrics.providerBatchMs = performance.now() - providerStarted;
+        progress();
+      }
+    } finally {
+      metrics.providerBatchMs = performance.now() - providerStarted;
+      progress();
+    }
+    walkingAttempts.push(...phaseAttempts.flat());
+    metrics.providerBatchMs = performance.now() - providerStarted;
+    signal?.throwIfAborted();
+    for (const [phase, reachable] of [
+      ['access', access],
+      ['egress', egress],
+    ] as const) {
+      if (reachable.length) continue;
+      // Mixed no-route and outage responses cannot prove that nothing is reachable.
+      const unavailable = walkingAttempts.some(
+        (a) => a.phase === phase && a.result.status === 'unavailable',
+      );
+      return finish({
+        status: 'no-journey',
+        reason: unavailable
+          ? 'walking-provider-unavailable'
+          : phase === 'access'
+            ? 'no-reachable-access-stops'
+            : 'no-reachable-egress-stops',
+      });
+    }
+    const compositionStarted = performance.now();
+    stage = 'composition';
+    stageStarted = compositionStarted;
+    progress();
+    const result = composeGeographicJourneys(
+      schedule,
+      request,
+      access,
+      egress,
+      policy,
+      undefined,
+      (completed) => {
+        completedAccessSearches = completed;
+        metrics.compositionMs = performance.now() - compositionStarted;
+        progress();
+        signal?.throwIfAborted();
+      },
+    );
+    metrics.compositionMs = performance.now() - compositionStarted;
+    progress();
+    signal?.throwIfAborted();
+    metrics.transitSearches = result.transitSearches;
+    // Failed candidates might have supplied the missing transit connection.
+    if (
+      result.status === 'no-journey' &&
+      walkingAttempts.some((a) => a.result.status === 'unavailable')
+    )
+      return finish({
+        status: 'no-journey',
+        reason: 'walking-provider-unavailable',
+      });
+    return finish(result);
+  } finally {
+    signal?.removeEventListener('abort', onAbort);
   }
-  const compositionStarted = performance.now();
-  const result = composeGeographicJourneys(
-    schedule,
-    request,
-    access,
-    egress,
-    policy,
-  );
-  metrics.compositionMs = performance.now() - compositionStarted;
-  signal?.throwIfAborted();
-  metrics.transitSearches = result.transitSearches;
-  // Failed candidates might have supplied the missing transit connection.
-  if (
-    result.status === 'no-journey' &&
-    walkingAttempts.some((a) => a.result.status === 'unavailable')
-  )
-    return finish({
-      status: 'no-journey',
-      reason: 'walking-provider-unavailable',
-    });
-  return finish(result);
 }

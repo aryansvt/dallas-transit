@@ -10,6 +10,89 @@ import type { CandidateSource } from './nearby-stops.js';
 
 afterEach(() => vi.useRealTimers());
 describe('bounded geographic orchestration', () => {
+  it.each([1, 2, 4])(
+    'keeps selection deterministic at global concurrency %s',
+    async (providerConcurrency) => {
+      vi.useFakeTimers();
+      const f = geographicFixture();
+      let active = 0;
+      let peak = 0;
+      let calls = 0;
+      const provider: WalkingProvider = {
+        id: 'out-of-order',
+        async route(request, signal) {
+          active++;
+          peak = Math.max(peak, active);
+          const position = calls++;
+          await new Promise((resolve) =>
+            setTimeout(resolve, position % 2 ? 1 : 10),
+          );
+          active--;
+          return f.provider.route(request, signal);
+        },
+      };
+      const pending = planGeographicJourney(
+        f.schedule,
+        f.request,
+        {
+          candidates: {
+            async find() {
+              return {
+                status: 'ok',
+                publicationId: f.schedule.publicationId,
+                access: f.access,
+                egress: f.egress,
+                originLookupMs: 0,
+                destinationLookupMs: 0,
+              };
+            },
+          },
+          walkingProvider: provider,
+        },
+        {
+          providerConcurrency,
+          maxAccessCandidates: 2,
+          maxEgressCandidates: 1,
+          maxProviderCalls: 5,
+        },
+      );
+      await vi.runAllTimersAsync();
+      const result = await pending;
+      expect(peak).toBe(providerConcurrency === 4 ? 3 : providerConcurrency);
+      expect(result.walkingAttempts.map((a) => a.stopId)).toEqual([
+        'A',
+        'X',
+        'B',
+        'C',
+      ]);
+      expect(result.metrics.providerCalls).toBe(4);
+      expect(result.metrics.transitSearches).toBe(2);
+    },
+  );
+  it('publishes aggregate composition progress before a deadline checkpoint throws', async () => {
+    const f = geographicFixture();
+    const snapshots: unknown[] = [];
+    await expect(
+      planGeographicJourney(f.schedule, f.request, {
+        candidates: f.candidates,
+        walkingProvider: f.provider,
+        onProgress(progress) {
+          snapshots.push(progress);
+          if (progress.completedAccessSearches === 1)
+            throw new Error('deadline');
+        },
+      }),
+    ).rejects.toThrow('deadline');
+    expect(snapshots.at(-1)).toMatchObject({
+      stage: 'composition',
+      completedAccessSearches: 1,
+      providerCalls: 5,
+      compositionMs: expect.any(Number),
+    });
+    expect(JSON.stringify(snapshots)).not.toMatch(
+      /latitude|longitude|stopId|-96/,
+    );
+  });
   it('chooses farther stops with faster provider routes and discards unreachable nearby stops', async () => {
     const f = geographicFixture();
     const result = await planGeographicJourney(f.schedule, f.request, {
