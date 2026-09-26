@@ -7,7 +7,11 @@ import {
   focusManager,
 } from '@tanstack/react-query';
 import { beforeEach, afterEach, it, expect, vi } from 'vitest';
-import type { LiveJourney } from '@dallas-transit/shared';
+import type {
+  LiveJourney,
+  GeographicJourney,
+  References,
+} from '@dallas-transit/shared';
 import { previewClient, previewResponse } from '../preview/fixtures';
 import type { TransitClient } from '../lib/api';
 import { ClientError } from '../lib/api';
@@ -77,7 +81,14 @@ afterEach(async () => {
 async function tick(ms = 50) {
   await act(async () => vi.advanceTimersByTimeAsync(ms));
 }
-async function render(client: TransitClient, onReplace = vi.fn()) {
+async function render(
+  client: TransitClient,
+  onReplace = vi.fn(),
+  selected: { journey: GeographicJourney; references: References } = {
+    journey,
+    references: plan.references,
+  },
+) {
   const cache = new QueryClient({
     defaultOptions: {
       queries: { retry: false, gcTime: 0, refetchOnWindowFocus: false },
@@ -89,8 +100,8 @@ async function render(client: TransitClient, onReplace = vi.fn()) {
         <LiveJourneyPanel
           id="fixture"
           client={client}
-          journey={journey}
-          references={plan.references}
+          journey={selected.journey}
+          references={selected.references}
           onReplace={onReplace}
         />
         <LiveTiming
@@ -112,13 +123,153 @@ function button(prefix: string) {
   if (!b) throw new Error(prefix);
   return b;
 }
+const statusLabel = () =>
+  container.querySelector('.live-status')?.getAttribute('aria-label');
+function threeBuses() {
+  const template = journey.legs.find((l) => l.kind === 'transit')!;
+  const bus = plan.references.routes.find((r) => r.type === 3)!;
+  const numbers = ['244', '238', '022'];
+  const selected = {
+    journey: {
+      ...journey,
+      legs: numbers.map((number) => ({
+        ...template,
+        routeId: number,
+        tripId: 'bus-trip',
+      })),
+    },
+    references: {
+      ...plan.references,
+      routes: numbers.map((number) => ({
+        ...bus,
+        routeId: number,
+        shortName: number,
+      })),
+    },
+  };
+  const data: LiveJourney = {
+    ...state(),
+    freshness: 'SCHEDULED_FALLBACK',
+    legs: numbers.map((_, i) => ({
+      ...state().legs[0]!,
+      legIndex: i,
+      freshness: 'SCHEDULED_FALLBACK',
+      vehicle: null,
+      stopsRemaining: null,
+    })),
+    transfers: [1, 2].map((outboundLeg) => ({
+      inboundLeg: outboundLeg - 1,
+      outboundLeg,
+      status: 'UNKNOWN',
+      requiredSeconds: 120,
+      remainingSeconds: null,
+      reason: 'Fresh timing is needed for both services.',
+    })),
+  };
+  return { selected, data };
+}
+it('shows one native primary boarding button and progresses only after explicit confirmations', async () => {
+  const { selected, data } = threeBuses();
+  await render({ ...previewClient, live: async () => data }, vi.fn(), selected);
+  const boarding = () =>
+    [...container.querySelectorAll('button')].filter((b) =>
+      b.textContent?.startsWith('I’m on'),
+    );
+  expect(boarding().map((b) => b.textContent)).toEqual(['I’m on bus 244']);
+  const first = boarding()[0]!;
+  expect(first.type).toBe('button');
+  expect(first.classList.contains('primary-button')).toBe(true);
+  expect(first.disabled).toBe(false);
+  first.focus();
+  expect(document.activeElement).toBe(first);
+  expect(
+    container.querySelector('.live-next-action h3')?.textContent,
+  ).toContain('Board at');
+  expect(
+    container.querySelector('.live-route-identity')?.textContent,
+  ).toContain('bus 244');
+  expect(container.querySelector('.live-status')?.textContent).toBe(
+    'Scheduled',
+  );
+  await tick(16000); // Polling and elapsed time cannot board for the rider.
+  expect(boarding()[0]?.textContent).toBe('I’m on bus 244');
+  expect(container.querySelector('.live-onboard')).toBeNull();
+  for (const number of ['244', '238', '022']) {
+    expect(boarding().map((b) => b.textContent)).toEqual([
+      `I’m on bus ${number}`,
+    ]);
+    await click(`I’m on bus ${number}`);
+    expect(boarding()).toHaveLength(0);
+    expect(container.querySelector('.live-onboard')?.textContent).toBe(
+      `You confirmed you’re on bus ${number}.`,
+    );
+    expect(
+      container.querySelector('.live-next-action h3')?.textContent,
+    ).toContain('Get off at');
+    expect(document.activeElement).toBe(button('I’m off'));
+    await click('I’m off');
+  }
+  expect(boarding()).toHaveLength(0);
+  expect(container.textContent).toContain('Transit rides complete');
+  expect(document.activeElement).toBe(
+    container.querySelector('.live-next-action h3'),
+  );
+});
+it('summarizes unavailable transfer timing once and removes it after the final boarding', async () => {
+  const { selected, data } = threeBuses();
+  await render({ ...previewClient, live: async () => data }, vi.fn(), selected);
+  const note = () => container.querySelectorAll('.live-transfer-note');
+  expect(note()).toHaveLength(1);
+  expect(note()[0]?.textContent).toBe(
+    'We can’t check transfer risk without live timing. Scheduled directions are still available.',
+  );
+  expect(container.textContent).not.toContain('Fresh timing');
+  await click('I’m on');
+  await click('I’m off');
+  await click('I’m on');
+  expect(note()).toHaveLength(1);
+  await click('I’m off');
+  await click('I’m on');
+  expect(note()).toHaveLength(0);
+});
+it('keeps actionable transfer warnings alongside one unavailable-timing explanation', async () => {
+  const { selected, data } = threeBuses();
+  data.transfers[1] = {
+    ...data.transfers[1]!,
+    status: 'AT_RISK',
+    reason: 'Only one minute remains for this transfer.',
+  };
+  await render({ ...previewClient, live: async () => data }, vi.fn(), selected);
+  expect(container.querySelectorAll('.live-transfer-note')).toHaveLength(1);
+  expect(container.textContent).toContain(
+    'Transfer is at risk. Only one minute remains for this transfer.',
+  );
+});
+it('retains scheduled transfer guidance when live requests fail', async () => {
+  const { selected } = threeBuses();
+  await render(
+    {
+      ...previewClient,
+      live: async () => {
+        throw new Error('offline');
+      },
+    },
+    vi.fn(),
+    selected,
+  );
+  expect(container.querySelector('.live-status')?.textContent).toBe(
+    'Scheduled',
+  );
+  expect(container.querySelectorAll('.live-transfer-note')).toHaveLength(1);
+  expect(button('I’m on bus 244')).toBeTruthy();
+});
 async function click(prefix: string) {
   await act(async () => button(prefix).click());
   await tick();
 }
 it('requires explicit onboard confirmation before giving exit guidance', async () => {
   await render({ ...previewClient, live: async () => state() });
-  expect(container.textContent).toContain('Live updates available');
+  expect(statusLabel()).toBe('Live updates available');
   expect(container.textContent).not.toContain('Get off next');
   expect(container.textContent).toContain('2 min late');
   await click('I’m on');
@@ -137,7 +288,7 @@ it('shares requests with timeline subscribers and polls at most every 15 seconds
   focusManager.setFocused(false);
   await tick(60000);
   expect(live).toHaveBeenCalledTimes(2);
-  expect(container.textContent).toContain('showing scheduled times');
+  expect(statusLabel()).toContain('showing scheduled times');
 });
 it('never keeps a live label or prediction after API failure', async () => {
   const live = vi
@@ -146,9 +297,9 @@ it('never keeps a live label or prediction after API failure', async () => {
     .mockRejectedValue(new Error('offline'));
   await render({ ...previewClient, live });
   await tick(15100);
-  expect(container.textContent).toContain('Live updates unavailable');
+  expect(statusLabel()).toContain('Live updates unavailable');
   expect(container.textContent).not.toContain('2 min late');
-  expect(container.textContent).not.toContain('Live updates available');
+  expect(statusLabel()).not.toBe('Live updates available');
 });
 
 it('stops polling expired journey handles and explains how to resume', async () => {
@@ -167,9 +318,9 @@ it('expires a live label at the server freshness boundary even between polls', a
   const data = state();
   data.validUntil = Date.now() / 1000 + 1;
   await render({ ...previewClient, live: async () => data });
-  expect(container.textContent).toContain('Live updates available');
+  expect(statusLabel()).toBe('Live updates available');
   await tick(1100);
-  expect(container.textContent).not.toContain('Live updates available');
+  expect(statusLabel()).not.toBe('Live updates available');
   expect(container.textContent).not.toContain('Get off next');
 });
 it.each(['AGING', 'STALE', 'SCHEDULED_FALLBACK', 'UNAVAILABLE'] as const)(
@@ -180,7 +331,7 @@ it.each(['AGING', 'STALE', 'SCHEDULED_FALLBACK', 'UNAVAILABLE'] as const)(
     data.legs[0]!.freshness = freshness;
     data.legs[0]!.vehicle = null;
     await render({ ...previewClient, live: async () => data });
-    expect(container.textContent).not.toContain('Live updates available');
+    expect(statusLabel()).not.toBe('Live updates available');
     if (freshness !== 'AGING')
       expect(container.textContent).not.toContain('2 min late');
   },
@@ -197,11 +348,27 @@ it('shows disruption warnings and preserves current directions after replan fail
   });
   await render({ ...previewClient, live: async () => data, replan });
   expect(container.textContent).toContain('cancelled');
+  const details = container.querySelector('details')!;
+  details.open = true;
+  const gpsButton = button('Use my current location');
+  const stopButton = button('Replan from this stop');
+  for (const action of [gpsButton, stopButton]) {
+    expect(action.type).toBe('button');
+    expect(action.classList.contains('text-button')).toBe(true);
+    expect(action.classList.contains('primary-button')).toBe(false);
+  }
+  expect(stopButton.disabled).toBe(true);
+  gpsButton.focus();
+  expect(document.activeElement).toBe(gpsButton);
   const select = container.querySelector('select')!;
+  expect(stopButton.closest('[role="group"]')?.contains(select)).toBe(true);
   await act(async () => {
     select.value = select.options[1]!.value;
     select.dispatchEvent(new Event('change', { bubbles: true }));
   });
+  expect(stopButton.disabled).toBe(false);
+  stopButton.focus();
+  expect(document.activeElement).toBe(stopButton);
   await click('Replan from this stop');
   expect(replan).toHaveBeenCalledTimes(1);
   expect(container.textContent).toContain(

@@ -18,6 +18,7 @@ import { ApiDatabase } from './database.js';
 import { postgresRepository } from './repository.js';
 import { ApiError } from './errors.js';
 import { deferred } from './test-support.js';
+import { STOP_SEARCH_SQL } from './stop-search.js';
 
 const databaseName = `journey_api_test_${randomUUID().replaceAll('-', '')}`;
 let admin: pg.Client;
@@ -295,5 +296,111 @@ describe('API with actual PostGIS and pooled clients', () => {
     expect(action).not.toHaveBeenCalled();
     await database.close();
     expect(database.pool.totalCount).toBe(0);
+  });
+  it('searches authoritative publication-scoped stops with deterministic token prefixes and bounded results', async () => {
+    // A realistic stop-count fixture gives useful indexed-query latency evidence.
+    await db.query(
+      `INSERT INTO static_gtfs.stops(feed_id,stop_id,stop_name,stop_lat,stop_lon,source_record)
+      SELECT $1, 'bulk-' || i, 'Synthetic Road ' || i, 32.8, -96.8, 1 FROM generate_series(1,12000) AS i`,
+      [originalId],
+    );
+    const names = [
+      'West End Station',
+      'CityLine/Bush Station',
+      'UT Dallas Station',
+      'Downtown Garland Station',
+      ...Array.from({ length: 9 }, () => 'Main Street'),
+    ];
+    for (const [i, name] of names.entries())
+      await db.query(
+        'INSERT INTO static_gtfs.stops(feed_id,stop_id,stop_name,stop_lat,stop_lon,source_record) VALUES($1,$2,$3,32.8,-96.8,1)',
+        [originalId, `search-${String(i).padStart(2, '0')}`, name],
+      );
+    await db.query(
+      'INSERT INTO static_gtfs.stops(feed_id,stop_id,stop_name,stop_lat,stop_lon,source_record) VALUES($1,$2,$3,32.8,-96.8,1)',
+      [correctedId, 'search-other', 'West End Station Other Publication'],
+    );
+    const repository = postgresRepository(config);
+    const app = buildApp({}, { config, repository });
+    const search = (q: string, extra = '') =>
+      app.inject(
+        `/v1/places/search?q=${encodeURIComponent(q)}&serviceDate=${date}${extra}`,
+      );
+    try {
+      for (const [q, name] of [
+        ['West End Station', 'West End Station'],
+        ['cityline bu', 'CityLine/Bush Station'],
+        ['UT Dal', 'UT Dallas Station'],
+        ['Garland', 'Downtown Garland Station'],
+      ]) {
+        const response = await search(q!);
+        expect(response.statusCode).toBe(200);
+        expect(response.json().places).toEqual([
+          expect.objectContaining({
+            name,
+            transit: { stopId: expect.any(String), publicationId: originalId },
+          }),
+        ]);
+        expect(response.body).not.toContain('source_record');
+        expect(response.body).not.toContain('parentStation');
+      }
+      const first = (await search('Main')).json();
+      expect(first.places).toHaveLength(6);
+      expect(first).toEqual((await search('Main')).json());
+      expect(
+        first.places.map(
+          (p: { transit: { stopId: string } }) => p.transit.stopId,
+        ),
+      ).toEqual([
+        'search-04',
+        'search-05',
+        'search-06',
+        'search-07',
+        'search-08',
+        'search-09',
+      ]);
+      expect(
+        (
+          await search('West End Station', `&publicationId=${correctedId}`)
+        ).json().status,
+      ).toBe('unavailable');
+      expect((await app.inject('/v1/places/search?q=Station')).statusCode).toBe(
+        400,
+      );
+      await db.query('ANALYZE static_gtfs.stops');
+      const plan = await db.query(`EXPLAIN (FORMAT JSON) ${STOP_SEARCH_SQL}`, [
+        originalId,
+        'station:*',
+        'Station',
+        6,
+      ]);
+      expect(JSON.stringify(plan.rows)).toContain('stops_search_name');
+      const timings: number[] = [];
+      for (let i = 0; i < 20; i++) {
+        const start = performance.now();
+        await search('Station');
+        timings.push(performance.now() - start);
+      }
+      timings.sort((a, b) => a - b);
+      console.info(
+        `Stop-search fixture warm latency: median=${timings[10]!.toFixed(1)}ms p95=${timings[18]!.toFixed(1)}ms`,
+      );
+      expect(
+        await db.query(
+          "SELECT indexname FROM pg_indexes WHERE schemaname='static_gtfs' AND indexname='stops_search_name'",
+        ),
+      ).toMatchObject({ rowCount: 1 });
+      vi.spyOn(repository, 'searchStops').mockRejectedValueOnce(
+        new Error('private database details'),
+      );
+      const failure = await search('Station');
+      expect(failure.json()).toEqual({
+        status: 'unavailable',
+        reason: 'provider-unavailable',
+        places: [],
+      });
+    } finally {
+      await app.close();
+    }
   });
 });

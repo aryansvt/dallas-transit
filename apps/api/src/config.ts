@@ -1,5 +1,6 @@
 import { geographicPolicy } from '@dallas-transit/router';
 import { valhallaWalkingProvider } from '@dallas-transit/transit-ingest/runtime';
+import { geoapifyWalkingProvider } from './geoapify-walking.js';
 
 // Server-owned; request overrides cannot raise these budgets.
 export const API_POLICY = geographicPolicy({
@@ -13,6 +14,9 @@ export const API_POLICY = geographicPolicy({
   maxJourneys: 3,
 });
 export const MAX_TRANSFERS = 3;
+
+/** Only static, non-secret messages from configuration validation may be logged. */
+export class ServerConfigurationError extends Error {}
 
 export function readServerConfig(env: NodeJS.ProcessEnv = process.env) {
   const integer = (
@@ -29,13 +33,18 @@ export function readServerConfig(env: NodeJS.ProcessEnv = process.env) {
       value < min ||
       value > max
     )
-      throw new Error(`${name} must be an integer between ${min} and ${max}`);
+      throw new ServerConfigurationError(
+        `${name} must be an integer between ${min} and ${max}`,
+      );
     return value;
   };
   const host = env.HOST ?? '127.0.0.1';
-  if (!host.trim()) throw new Error('HOST must not be empty');
+  if (!host.trim())
+    throw new ServerConfigurationError('HOST must not be empty');
   if (env.NODE_ENV === 'production' && !env.DATABASE_URL)
-    throw new Error('DATABASE_URL is required in production');
+    throw new ServerConfigurationError(
+      'DATABASE_URL is required in production',
+    );
   const databaseUrl =
     env.DATABASE_URL ??
     'postgresql://dallas_dev:local_only_password@127.0.0.1:5432/dallas_transit';
@@ -49,15 +58,44 @@ export function readServerConfig(env: NodeJS.ProcessEnv = process.env) {
     )
       throw new Error();
   } catch {
-    throw new Error('DATABASE_URL must identify a PostgreSQL database');
+    throw new ServerConfigurationError(
+      'DATABASE_URL must identify a PostgreSQL database',
+    );
   }
   const walkingUrl = env.WALKING_VALHALLA_URL;
-  if (walkingUrl !== undefined) valhallaWalkingProvider(walkingUrl);
+  const geoapifyKey = env.GEOAPIFY_API_KEY;
+  if (geoapifyKey !== undefined) {
+    try {
+      geoapifyWalkingProvider(geoapifyKey);
+    } catch {
+      throw new ServerConfigurationError(
+        'GEOAPIFY_API_KEY must be a nonempty server API key without whitespace',
+      );
+    }
+  }
+  if (geoapifyKey && walkingUrl)
+    throw new ServerConfigurationError(
+      'Configure only GEOAPIFY_API_KEY for production walking',
+    );
+  if (env.NODE_ENV === 'production' && !geoapifyKey)
+    throw new ServerConfigurationError(
+      'GEOAPIFY_API_KEY is required in production',
+    );
+  if (walkingUrl !== undefined) {
+    try {
+      valhallaWalkingProvider(walkingUrl);
+    } catch {
+      throw new ServerConfigurationError(
+        'WALKING_VALHALLA_URL must be an HTTP(S) /route endpoint without credentials, query, or fragment',
+      );
+    }
+  }
   return Object.freeze({
     host,
     port: integer('PORT', 3001, 1, 65535),
     databaseUrl,
     walkingUrl,
+    geoapifyKey,
     sourceKey: 'dart' as string,
     journeyTimeoutMs: integer('JOURNEY_TIMEOUT_MS', 15000, 100, 30000),
     poolSize: integer('DATABASE_POOL_SIZE', 4, 1, 16),

@@ -25,8 +25,16 @@ export function readPlaces(storage: Pick<Storage, 'getItem'>): LocalPlaces {
       return emptyPlaces();
     return {
       version: 1,
-      recent: data.recent.filter(isPlace).slice(0, 5).map(copyPlace),
-      saved: data.saved.filter(isPlace).slice(0, 5).map(copyPlace),
+      recent: data.recent
+        .filter(isPlace)
+        .filter((p) => !p.temporary)
+        .slice(0, 5)
+        .map(copyPlace),
+      saved: data.saved
+        .filter(isPlace)
+        .filter((p) => !p.temporary)
+        .slice(0, 5)
+        .map(copyPlace),
     };
   } catch {
     return emptyPlaces();
@@ -41,8 +49,14 @@ export function writePlaces(
       PLACES_KEY,
       JSON.stringify({
         version: 1,
-        recent: data.recent.slice(0, 5).map(copyPlace),
-        saved: data.saved.slice(0, 5).map(copyPlace),
+        recent: data.recent
+          .filter((p) => !p.temporary)
+          .slice(0, 5)
+          .map(copyPlace),
+        saved: data.saved
+          .filter((p) => !p.temporary)
+          .slice(0, 5)
+          .map(copyPlace),
       }),
     );
     return true;
@@ -51,6 +65,7 @@ export function writePlaces(
   }
 }
 export function addRecent(data: LocalPlaces, place: Place): LocalPlaces {
+  if (place.temporary) return data;
   return {
     ...data,
     recent: [
@@ -60,6 +75,7 @@ export function addRecent(data: LocalPlaces, place: Place): LocalPlaces {
   };
 }
 export function toggleSaved(data: LocalPlaces, place: Place): LocalPlaces {
+  if (place.temporary) return data;
   return {
     ...data,
     saved: data.saved.some((p) => samePlace(p, place))

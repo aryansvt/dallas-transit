@@ -9,6 +9,7 @@ import {
 import type { ApiConfig } from './config.js';
 import { ApiDatabase } from './database.js';
 import { ApiError } from './errors.js';
+import { searchStops } from './stop-search.js';
 import type { ScheduleSource } from './schedules.js';
 
 import type {
@@ -29,6 +30,12 @@ export interface Readiness {
   schedule: boolean;
 }
 export interface TransitRepository extends ScheduleSource {
+  searchStops?(
+    query: string,
+    date: string,
+    expected: string | undefined,
+    signal: AbortSignal,
+  ): Promise<import('@dallas-transit/shared').Place[]>;
   candidates: CandidateSource;
   readiness(signal: AbortSignal): Promise<Readiness>;
   metadata(
@@ -87,6 +94,10 @@ export function postgresRepository(
     return selected.rows[0]?.feed_id ?? null;
   };
   return {
+    searchStops: (query, date, expected, signal) =>
+      database.use(signal, (db) =>
+        searchStops(db, config.sourceKey, query, date, expected),
+      ),
     publication: (date, signal) =>
       database.use(signal, (db) => publication(db, date)),
     load: (date, signal) =>

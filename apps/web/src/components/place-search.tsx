@@ -1,7 +1,13 @@
 'use client';
-import { useEffect, useId, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import type { Place } from '@dallas-transit/shared';
+import { useEffect, useId, useRef, useState } from 'react';
+import {
+  ProviderError,
+  type Place,
+  type PlaceSuggestion,
+  type SearchContext,
+  type SearchResults,
+} from '@dallas-transit/shared';
+import { dallasParts } from '../lib/time';
 import { errorMessage, type TransitClient } from '../lib/api';
 import { Dialog } from './dialog';
 import { Icon } from './icon';
@@ -14,6 +20,7 @@ export function PlaceSearch({
   onClose,
   initialQuery = '',
   localPlaces = [],
+  context,
 }: {
   target: 'origin' | 'destination';
   client: TransitClient;
@@ -21,23 +28,93 @@ export function PlaceSearch({
   onClose(): void;
   initialQuery?: string;
   localPlaces?: Place[];
+  context?: SearchContext;
 }) {
   const [query, setQuery] = useState(initialQuery);
-  const [debounced, setDebounced] = useState(initialQuery);
+  const [result, setResult] = useState<{
+    query: string;
+    data: SearchResults;
+  } | null>(null);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [selecting, setSelecting] = useState(false);
+  const [session] = useState(() => client.createPlaceSession?.());
+  const selection = useRef<AbortController | null>(null);
   const [active, setActive] = useState(-1);
   const id = useId();
+  const date = context?.serviceDate ?? dallasParts(new Date()).date;
+  const publicationId = context?.publicationId;
+  const latitude = context?.proximity?.latitude;
+  const longitude = context?.proximity?.longitude;
   useEffect(() => {
-    const timer = setTimeout(() => setDebounced(query.trim()), 250);
-    return () => clearTimeout(timer);
-  }, [query]);
-  const search = useQuery({
-    queryKey: ['places', debounced],
-    queryFn: ({ signal }) => client.places(debounced, signal),
-    enabled: debounced.length >= 2 && query.trim() === debounced,
-  });
-  const ready = query.trim() === debounced;
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      setError('');
+      if (query.trim().length < 2) {
+        session?.close();
+        setLoading(false);
+        return;
+      }
+      setLoading(true);
+      const searchContext: SearchContext = {
+        serviceDate: date,
+        ...(publicationId ? { publicationId } : {}),
+        ...(latitude !== undefined && longitude !== undefined
+          ? { proximity: { latitude, longitude } }
+          : {}),
+      };
+      const work = session
+        ? session.suggest(query.trim(), searchContext, controller.signal)
+        : client
+            .places(query.trim(), controller.signal)
+            .then((r): SearchResults => ({
+              suggestions: r.places.map((p, i) => ({
+                id: `fixture:${i}`,
+                name: p.name,
+                ...(p.context ? { context: p.context } : {}),
+                kind: p.transit ? 'transit' : 'place',
+                place: p,
+              })),
+              failures:
+                r.status === 'ok'
+                  ? []
+                  : [{ source: 'places', reason: r.reason }],
+            }));
+      void work
+        .then((data) => {
+          if (!controller.signal.aborted)
+            setResult({ query: query.trim(), data });
+        })
+        .catch((e) => {
+          if (!controller.signal.aborted) setError(errorMessage(e));
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setLoading(false);
+        });
+    }, 250);
+    const expiry = setTimeout(() => {
+      controller.abort();
+      session?.close();
+      setResult(null);
+      setLoading(false);
+      if (query.trim().length >= 2)
+        setError('Search expired. Edit your search to refresh the results.');
+    }, 175000);
+    return () => {
+      clearTimeout(timer);
+      clearTimeout(expiry);
+      controller.abort();
+    };
+  }, [query, client, session, date, publicationId, latitude, longitude]);
+  useEffect(
+    () => () => {
+      selection.current?.abort();
+      session?.close();
+    },
+    [session],
+  );
   const remotePlaces =
-    ready && search.data?.status === 'ok' ? search.data.places : [];
+    result?.query === query.trim() ? result.data.suggestions : [];
   const matchingLocal = localPlaces.filter(
     (p, i, all) =>
       all.findIndex((other) => samePlace(p, other)) === i &&
@@ -46,28 +123,75 @@ export function PlaceSearch({
         .includes(query.trim().toLowerCase()),
   );
   const places = [
-    ...matchingLocal,
+    ...matchingLocal.map((p, i): PlaceSuggestion => ({
+      id: `saved:${i}`,
+      name: p.name,
+      ...(p.context ? { context: p.context } : {}),
+      kind: p.transit ? 'transit' : 'place',
+      place: p,
+    })),
     ...remotePlaces.filter(
-      (p) => !matchingLocal.some((other) => samePlace(p, other)),
+      (p) =>
+        !p.place || !matchingLocal.some((other) => samePlace(p.place!, other)),
     ),
   ].slice(0, 6);
-  const loading = query.trim().length >= 2 && (!ready || search.isFetching);
+  const choose = async (suggestion: PlaceSuggestion) => {
+    if (selecting) return;
+    selection.current?.abort();
+    const controller = new AbortController();
+    selection.current = controller;
+    setSelecting(true);
+    setError('');
+    try {
+      const place =
+        suggestion.place ??
+        (await session!.retrieve(suggestion, controller.signal));
+      if (!controller.signal.aborted) {
+        session?.close();
+        onSelect(place);
+      }
+    } catch (e) {
+      if (!controller.signal.aborted)
+        setError(
+          e instanceof ProviderError && e.code === 'timeout'
+            ? 'Place details took too long. Search again.'
+            : 'Place details are unavailable. Search again to refresh the results.',
+        );
+    } finally {
+      if (!controller.signal.aborted) setSelecting(false);
+    }
+  };
+  const failures = result?.query === query.trim() ? result.data.failures : [];
+  const failureText = failures
+    .map((f) =>
+      f.source === 'stops'
+        ? 'DART stop search is temporarily unavailable.'
+        : f.reason === 'not-configured'
+          ? 'Place search is not available yet. You can still use places already saved on this device.'
+          : f.reason === 'rate-limited'
+            ? 'Place search is busy. Please wait a moment before trying again.'
+            : f.reason === 'unauthorized'
+              ? 'Place search is unavailable because its access configuration needs attention.'
+              : f.reason === 'timeout'
+                ? 'Place search took too long. Please try again.'
+                : 'Place search is temporarily unavailable. Please try again shortly.',
+    )
+    .join(' ');
   const message =
-    query.trim().length < 2
-      ? places.length
-        ? 'Choose a place from this device, or search by name or street address.'
-        : 'Enter a place name or street address.'
-      : loading
-        ? 'Searching places…'
-        : search.error
-          ? errorMessage(search.error)
-          : search.data?.status === 'unavailable'
-            ? search.data.reason === 'not-configured'
-              ? 'Place search is not available yet. You can still use places already saved on this device.'
-              : 'Place search is temporarily unavailable. Please try again shortly.'
+    error ||
+    (selecting
+      ? 'Getting place details…'
+      : query.trim().length < 2
+        ? places.length
+          ? 'Choose a place from this device, or search by name or street address.'
+          : 'Enter a place name or street address.'
+        : loading || result?.query !== query.trim()
+          ? 'Searching places…'
+          : failureText
+            ? failureText
             : places.length === 0
               ? 'No places found. Try a fuller name or street address.'
-              : `${places.length} places found.`;
+              : `${places.length} places found.`);
   return (
     <Dialog
       title={target === 'origin' ? 'Your starting point' : 'Your destination'}
@@ -93,6 +217,7 @@ export function PlaceSearch({
             maxLength={160}
             placeholder="Place name or street address"
             value={query}
+            disabled={selecting}
             onChange={(e) => {
               setQuery(e.target.value);
               setActive(-1);
@@ -111,7 +236,7 @@ export function PlaceSearch({
               }
               if (e.key === 'Enter' && places[active]) {
                 e.preventDefault();
-                onSelect(places[active]);
+                void choose(places[active]);
               }
             }}
           />
@@ -133,29 +258,28 @@ export function PlaceSearch({
               aria-selected={active === i}
               className={active === i ? 'active' : ''}
               onPointerDown={(e) => e.preventDefault()}
-              onClick={() => onSelect(place)}
+              onClick={() => void choose(place)}
             >
               <Icon name="pin" />
               <span>
                 <strong>{place.name}</strong>
+                {place.kind === 'transit' && (
+                  <span className="secondary">DART transit stop</span>
+                )}
                 {place.context && (
                   <span className="secondary">{place.context}</span>
                 )}
-                {matchingLocal.some((p) => samePlace(p, place)) && (
-                  <span className="secondary">On this device</span>
-                )}
+                {place.place &&
+                  matchingLocal.some((p) => samePlace(p, place.place!)) && (
+                    <span className="secondary">On this device</span>
+                  )}
               </span>
               <Icon name="chevron" />
             </li>
           ))}
         </ul>
-        {search.error && (
-          <button
-            className="secondary-button"
-            onClick={() => void search.refetch()}
-          >
-            Try search again
-          </button>
+        {result?.data.attribution && (
+          <p className="secondary">{result.data.attribution}</p>
         )}
       </div>
     </Dialog>

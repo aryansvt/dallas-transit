@@ -7,6 +7,27 @@ import {
   writePlaces,
 } from './local-places';
 import { previewDestination as place } from '../preview/fixtures';
+it('never stores temporary search data through recents, saves or direct writes', () => {
+  const temporary = { ...place, temporary: true };
+  expect(addRecent(emptyPlaces(), temporary)).toEqual(emptyPlaces());
+  expect(toggleSaved(emptyPlaces(), temporary)).toEqual(emptyPlaces());
+  let raw = '';
+  writePlaces(
+    {
+      setItem: (_key, value) => {
+        raw = value;
+      },
+    },
+    { version: 1, recent: [temporary], saved: [temporary] },
+  );
+  expect(JSON.parse(raw)).toEqual(emptyPlaces());
+  expect(
+    readPlaces({
+      getItem: () =>
+        JSON.stringify({ version: 1, recent: [temporary], saved: [temporary] }),
+    }),
+  ).toEqual(emptyPlaces());
+});
 it('validates storage version, structure, lengths and coordinates', () => {
   for (const raw of [
     '{',

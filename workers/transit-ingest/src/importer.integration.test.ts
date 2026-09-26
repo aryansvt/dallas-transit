@@ -50,12 +50,15 @@ afterAll(async () => {
 });
 
 describe('static ingestion on real PostgreSQL/PostGIS', () => {
-  it('applies the migration exactly once and has PostGIS', async () => {
+  it('applies each migration exactly once and has PostGIS', async () => {
     await migrate(db);
     expect(
-      (await db.query('SELECT name FROM public.transit_schema_migrations'))
-        .rows,
-    ).toHaveLength(1);
+      (
+        await db.query<{ name: string }>(
+          'SELECT name FROM public.transit_schema_migrations ORDER BY name',
+        )
+      ).rows.map((row) => row.name),
+    ).toEqual(['001_static_gtfs.sql', '002_stop_search.sql']);
     expect(
       (
         await db.query<{ version: string }>(
@@ -475,8 +478,12 @@ describe('static ingestion on real PostgreSQL/PostGIS', () => {
       (await db.query('SELECT * FROM static_gtfs.feed_activation')).rows,
     ).toEqual([]);
     expect(
-      (await db.query('SELECT * FROM public.transit_schema_migrations')).rows,
-    ).toHaveLength(1);
+      (
+        await db.query<{ name: string }>(
+          'SELECT name FROM public.transit_schema_migrations ORDER BY name',
+        )
+      ).rows.map((row) => row.name),
+    ).toEqual(['001_static_gtfs.sql', '002_stop_search.sql']);
   });
   it('serializes concurrent identical imports into one complete publication', async () => {
     const connection = new URL(

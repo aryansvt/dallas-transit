@@ -2,6 +2,28 @@ import { describe, expect, it } from 'vitest';
 import { readServerConfig } from './config.js';
 
 describe('server configuration', () => {
+  it('requires Geoapify only in production and rejects conflicting walking providers', () => {
+    const database = 'postgresql://localhost/transit';
+    expect(() =>
+      readServerConfig({ NODE_ENV: 'production', DATABASE_URL: database }),
+    ).toThrow('GEOAPIFY_API_KEY');
+    expect(
+      readServerConfig({
+        NODE_ENV: 'production',
+        DATABASE_URL: database,
+        GEOAPIFY_API_KEY: 'fixture-key',
+      }).geoapifyKey,
+    ).toBe('fixture-key');
+    expect(() =>
+      readServerConfig({
+        GEOAPIFY_API_KEY: 'private',
+        WALKING_VALHALLA_URL: 'http://localhost:8002/route',
+      }),
+    ).toThrow('only');
+    expect(() => readServerConfig({ GEOAPIFY_API_KEY: '' })).toThrow(
+      'nonempty',
+    );
+  });
   it('defaults to a loopback listener on port 3001', () => {
     expect(readServerConfig({})).toMatchObject({
       host: '127.0.0.1',

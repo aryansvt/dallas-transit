@@ -124,6 +124,12 @@ reliable phone permission workflow. A session attempt marker holds no coordinate
 
 ## Place search
 
+M9A supersedes the provisional server-only external-provider placement below:
+Mapbox Search Box Suggest/Retrieve runs behind a browser-owned search-session
+adapter using a public URL-restricted token. Authoritative GTFS stop search stays
+behind the API. Search Box results are temporary and excluded from saved/recent
+storage. See `MILESTONE_9A_REVIEW.md` for the approved provider integration.
+
 Selecting either place opens a focused mobile search sheet/dialog; desktop uses a
 contained dialog. Search actual places/addresses, not a disguised stop-only search.
 Architecture: **Web UI → our versioned API → provider-neutral place-search

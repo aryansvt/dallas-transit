@@ -10,6 +10,7 @@ import {
 } from '@dallas-transit/transit-ingest/runtime';
 import { abortable, Capacity } from './async.js';
 import { readServerConfig, type ApiConfig } from './config.js';
+import { geoapifyWalkingProvider } from './geoapify-walking.js';
 import {
   dateQuerySchema,
   errors,
@@ -90,9 +91,11 @@ export function buildApp(
     );
   const provider =
     dependencies.walkingProvider ??
-    (config.walkingUrl
-      ? valhallaWalkingProvider(config.walkingUrl)
-      : undefined);
+    (config.geoapifyKey
+      ? geoapifyWalkingProvider(config.geoapifyKey)
+      : config.walkingUrl
+        ? valhallaWalkingProvider(config.walkingUrl)
+        : undefined);
   const service = new JourneyService(repository, config, provider);
   const live = new LiveJourneys(
     service,
@@ -269,7 +272,9 @@ export function buildApp(
   });
 
   app.get('/health', async () => ({ status: 'ok' }));
-  app.get<{ Querystring: { q: string } }>(
+  app.get<{
+    Querystring: { q: string; serviceDate?: string; publicationId?: string };
+  }>(
     '/v1/places/search',
     {
       schema: {
@@ -280,8 +285,27 @@ export function buildApp(
     async (request, reply) => {
       const query = request.query.q.trim();
       if (query.length < 2) throw new ApiError('INVALID_REQUEST');
+      const date = request.query.serviceDate;
+      if (date) serviceDate(date);
+      if (!dependencies.placeProvider && repository.searchStops && !date)
+        throw new ApiError('INVALID_REQUEST');
       return execute(request, reply, reads, ({ signal }) =>
-        searchPlaces(dependencies.placeProvider, query, signal),
+        searchPlaces(
+          dependencies.placeProvider ??
+            (repository.searchStops
+              ? {
+                  search: (q, options) =>
+                    repository.searchStops!(
+                      q,
+                      date!,
+                      request.query.publicationId,
+                      options.signal,
+                    ),
+                }
+              : undefined),
+          query,
+          signal,
+        ),
       );
     },
   );

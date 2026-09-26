@@ -7,8 +7,9 @@ import type {
   References,
 } from '@dallas-transit/shared';
 import { ClientError, errorMessage, type TransitClient } from '../lib/api';
-import { routeName, stopName } from '../lib/presentation';
+import { routeColors, routeName, stopName } from '../lib/presentation';
 import { serviceTime } from '../lib/time';
+import { Icon } from './icon';
 
 export function useLiveJourney(
   id: string | undefined,
@@ -127,6 +128,14 @@ export function LiveJourneyPanel({
   const [stop, setStop] = useState('');
   const controller = useRef<AbortController | null>(null);
   const cooldown = useRef(0);
+  const actionButton = useRef<HTMLButtonElement>(null);
+  const actionHeading = useRef<HTMLHeadingElement>(null);
+  const restoreActionFocus = useRef(false);
+  useEffect(() => {
+    if (!restoreActionFocus.current) return;
+    restoreActionFocus.current = false;
+    (actionButton.current ?? actionHeading.current)?.focus();
+  }, [onboard, completedThrough]);
   useEffect(() => () => controller.current?.abort(), []);
   const rides = journey.legs.flatMap((l, i) =>
     l.kind === 'transit' ? [{ leg: l, index: i }] : [],
@@ -238,14 +247,33 @@ export function LiveJourneyPanel({
   const current = data?.legs.find((l) => l.legIndex === onboard);
   const currentRide = rides.find((r) => r.index === onboard);
   const nextRide = rides.find((r) => r.index > completedThrough);
+  const actionableRide = currentRide ?? nextRide;
+  const route = references.routes.find(
+    (r) => r.routeId === actionableRide?.leg.routeId,
+  );
+  const mode =
+    route?.type === 3
+      ? 'bus'
+      : route && [0, 1, 2].includes(route.type)
+        ? 'train'
+        : 'service';
+  const rideName = `${mode} ${routeName(route)}`;
+  const headsign = references.trips.find(
+    (t) => t.tripId === actionableRide?.leg.tripId,
+  )?.headsign;
   const activeTransfers =
-    data?.transfers.filter((t) => t.outboundLeg > completedThrough) ?? [];
+    data?.transfers.filter(
+      (t) => t.outboundLeg > (onboard ?? completedThrough),
+    ) ?? [];
   const activeDisruption =
     data?.legs.some(
       (l) =>
         l.legIndex > completedThrough &&
         (l.cancelled || l.boardingSkipped || l.alightingSkipped),
     ) || activeTransfers.some((t) => t.status === 'INFEASIBLE');
+  const transferTimingUnavailable =
+    activeTransfers.some((t) => t.status === 'UNKNOWN') ||
+    (!data && rides.filter((r) => r.index > completedThrough).length > 1);
   const freshness = data?.freshness ?? 'UNAVAILABLE';
   const labels = {
     LIVE: 'Live updates available',
@@ -256,8 +284,79 @@ export function LiveJourneyPanel({
   };
   return (
     <section className="live-following" aria-label="Live journey">
-      <p className="eyebrow">Your journey now</p>
-      <p role="status">{labels[freshness]}</p>
+      <div className="live-following-header">
+        <p className="eyebrow">Your journey now</p>
+        <span
+          className={`live-status${freshness === 'LIVE' ? ' is-live' : ''}`}
+          role="status"
+          aria-label={labels[freshness]}
+        >
+          {freshness === 'LIVE'
+            ? 'Live'
+            : freshness === 'AGING'
+              ? 'Updates delayed'
+              : 'Scheduled'}
+        </span>
+      </div>
+      <div className="live-next-action">
+        <h3 ref={actionHeading} tabIndex={-1}>
+          {currentRide
+            ? `Get off at ${stopName(references, currentRide.leg.alightingStopId)}`
+            : nextRide
+              ? `Board at ${stopName(references, nextRide.leg.boardingStopId)}`
+              : 'Transit rides complete'}
+        </h3>
+        {actionableRide && (
+          <div className="live-route-identity">
+            <span className="route-badge" style={routeColors(route)}>
+              <Icon name={mode === 'bus' ? 'bus' : 'train'} />
+              <span>{rideName}</span>
+            </span>
+            {headsign && <span>Toward {headsign}</span>}
+          </div>
+        )}
+        {currentRide ? (
+          <>
+            <p className="live-onboard" role="status">
+              You confirmed you’re on {rideName}.
+            </p>
+            <p className="secondary">
+              {current?.vehicle?.freshness === 'LIVE' &&
+              current.stopsRemaining !== null
+                ? current.stopsRemaining === 0
+                  ? 'Your exit stop is the current stop. Check signs before getting off.'
+                  : current.stopsRemaining === 1
+                    ? 'Get off next. Check the stop name.'
+                    : `${current.stopsRemaining} stops remaining`
+                : 'Vehicle progress unavailable. Follow the listed stops and onboard announcements.'}
+            </p>
+          </>
+        ) : (
+          <p className="secondary">
+            {nextRide
+              ? 'Check the route and destination on the vehicle. Confirm only when you’ve boarded.'
+              : 'Follow your final walking directions.'}
+          </p>
+        )}
+        {actionableRide && (
+          <button
+            ref={actionButton}
+            type="button"
+            className={currentRide ? 'secondary-button' : 'primary-button'}
+            onClick={() => {
+              restoreActionFocus.current = true;
+              if (onboard !== null) {
+                setCompletedThrough(onboard);
+                setOnboard(null);
+              } else if (nextRide) setOnboard(nextRide.index);
+            }}
+          >
+            {currentRide
+              ? `I’m off at ${stopName(references, currentRide.leg.alightingStopId)}`
+              : `I’m on ${rideName}`}
+          </button>
+        )}
+      </div>
       {query.error instanceof ClientError &&
         ['NOT_FOUND', 'PUBLICATION_CHANGED'].includes(query.error.code) && (
           <p className="notice">
@@ -282,77 +381,31 @@ export function LiveJourneyPanel({
           sec ago
         </p>
       )}
-      {onboard === null ? (
-        <>
-          <p>
-            {nextRide
-              ? `Next: board at ${stopName(references, nextRide.leg.boardingStopId)}. Confirm when you board to follow your ride.`
-              : 'Transit legs completed. Follow your final walking directions.'}
-          </p>
-          {rides
-            .filter((r) => r.index > completedThrough)
-            .map((r) => (
-              <button
-                className="back-button"
-                key={r.index}
-                onClick={() => setOnboard(r.index)}
-              >
-                I’m on{' '}
-                {routeName(
-                  references.routes.find((x) => x.routeId === r.leg.routeId),
-                )}
-              </button>
-            ))}
-        </>
-      ) : (
-        <>
-          <p>
-            {current?.vehicle?.freshness === 'LIVE' &&
-            current.stopsRemaining !== null
-              ? current.stopsRemaining === 0
-                ? 'Your exit stop is the current stop. Check signs before getting off.'
-                : current.stopsRemaining === 1
-                  ? 'Get off next. Check the stop name.'
-                  : `${current.stopsRemaining} stops remaining`
-              : 'Vehicle progress unavailable. Follow the listed stops and onboard announcements.'}
-          </p>
-          {currentRide && (
-            <p>
-              Get off at {stopName(references, currentRide.leg.alightingStopId)}
-              .
-            </p>
-          )}
-          <button
-            className="back-button"
-            onClick={() => {
-              setCompletedThrough(onboard);
-              setOnboard(null);
-            }}
-          >
-            I’m off at{' '}
-            {currentRide
-              ? stopName(references, currentRide.leg.alightingStopId)
-              : 'my exit stop'}
-          </button>
-        </>
-      )}
-      {activeTransfers.map((t) => (
-        <p
-          key={t.outboundLeg}
-          className={
-            t.status === 'AT_RISK' || t.status === 'INFEASIBLE'
-              ? 'notice'
-              : 'secondary'
-          }
-        >
-          {t.status === 'INFEASIBLE'
-            ? 'Transfer may be missed. '
-            : t.status === 'AT_RISK'
-              ? 'Transfer is at risk. '
-              : ''}
-          {t.reason}
+      {transferTimingUnavailable && (
+        <p className="secondary live-transfer-note">
+          We can’t check transfer risk without live timing. Scheduled directions
+          are still available.
         </p>
-      ))}
+      )}
+      {activeTransfers
+        .filter((t) => t.status !== 'UNKNOWN')
+        .map((t) => (
+          <p
+            key={t.outboundLeg}
+            className={
+              t.status === 'AT_RISK' || t.status === 'INFEASIBLE'
+                ? 'notice'
+                : 'secondary'
+            }
+          >
+            {t.status === 'INFEASIBLE'
+              ? 'Transfer may be missed. '
+              : t.status === 'AT_RISK'
+                ? 'Transfer is at risk. '
+                : ''}
+            {t.reason}
+          </p>
+        ))}
       {data?.alerts.map((a) => (
         <div key={a.id} className="notice">
           <strong>{a.title || 'Service alert'}</strong>
@@ -378,30 +431,34 @@ export function LiveJourneyPanel({
         <summary>Find new route options</summary>
         <p>Use your current location, or confirm the stop where you are now.</p>
         <button
-          className="back-button"
+          type="button"
+          className="text-button"
           disabled={busy}
           onClick={() => void replan('gps')}
         >
           Use my current location
         </button>
-        <label>
-          I am at{' '}
-          <select value={stop} onChange={(e) => setStop(e.target.value)}>
-            <option value="">Choose a stop</option>
-            {stops.map((s) => (
-              <option key={s} value={s}>
-                {stopName(references, s)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button
-          className="back-button"
-          disabled={busy || !stop}
-          onClick={() => void replan('stop')}
-        >
-          {busy ? 'Finding options…' : 'Replan from this stop'}
-        </button>
+        <div role="group" aria-label="Replan from a stop">
+          <label>
+            I am at{' '}
+            <select value={stop} onChange={(e) => setStop(e.target.value)}>
+              <option value="">Choose a stop</option>
+              {stops.map((s) => (
+                <option key={s} value={s}>
+                  {stopName(references, s)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            className="text-button"
+            disabled={busy || !stop}
+            onClick={() => void replan('stop')}
+          >
+            {busy ? 'Finding options…' : 'Replan from this stop'}
+          </button>
+        </div>
       </details>
       {message && <p role="status">{message}</p>}
       {alternative && (
