@@ -25,6 +25,9 @@ export interface JourneyObservation {
   compositionMs?: number;
   referenceMs?: number;
   retries?: number;
+  stage?: 'candidates' | 'walking' | 'composition' | 'complete';
+  providerCalls?: number;
+  completedAccessSearches?: number;
 }
 export class JourneyService {
   readonly schedules: PreparedSchedules;
@@ -77,6 +80,10 @@ export class JourneyService {
             candidates: this.repository.candidates,
             walkingProvider: this.walkingProvider,
             signal,
+            onProgress(progress) {
+              Object.assign(observation, progress);
+            },
+            checkpoint,
           },
           API_POLICY,
         );

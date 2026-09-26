@@ -35,6 +35,51 @@ afterEach(async () => {
 });
 
 describe('V1 journey contract', () => {
+  it('logs partial walking timings on request timeout without coordinates', async () => {
+    const f = apiFixture();
+    const records: Record<string, unknown>[] = [];
+    const entered = deferred<void>();
+    f.provider.route = async () => {
+      entered.resolve();
+      return new Promise(() => {});
+    };
+    const app = buildApp(
+      {
+        logger: {
+          stream: {
+            write(line) {
+              records.push(JSON.parse(line) as Record<string, unknown>);
+            },
+          },
+        },
+      },
+      {
+        config: readServerConfig({ JOURNEY_TIMEOUT_MS: '100' }),
+        repository: f.repository,
+        walkingProvider: f.provider,
+      },
+    );
+    apps.push(app);
+    await app.ready();
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const pending = app
+      .inject({ method: 'POST', url: '/v1/journeys', payload: f.request })
+      .then((r) => r);
+    await entered.promise;
+    await vi.advanceTimersByTimeAsync(100);
+    expect((await pending).json().error.code).toBe('REQUEST_TIMEOUT');
+    expect(records).toContainEqual(
+      expect.objectContaining({
+        msg: 'request completed',
+        stage: 'walking',
+        providerCalls: 2,
+        providerMs: expect.any(Number),
+        compositionMs: 0,
+        completedAccessSearches: 0,
+      }),
+    );
+    expect(JSON.stringify(records)).not.toMatch(/latitude|longitude|-96/);
+  });
   it('preserves useful partial results and logs safe categories without provider details or coordinates', async () => {
     const f = apiFixture();
     const records: Record<string, unknown>[] = [];

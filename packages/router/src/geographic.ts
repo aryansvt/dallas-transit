@@ -30,6 +30,7 @@ export function composeGeographicJourneys(
     journey: GeographicJourney,
     decision: 'dominated' | 'same-rides' | 'limit' | 'retained',
   ) => void,
+  checkpoint?: (completedAccessSearches: number) => void,
 ): GeographicCompositionResult {
   validateGeographicRequest(request);
   const policy = geographicPolicy(overrides);
@@ -91,6 +92,7 @@ export function composeGeographicJourneys(
   if (!egress.length) return none('no-reachable-egress-stops');
   let transitSearches = 0;
   const composed: GeographicJourney[] = [];
+  let completedAccessSearches = 0;
   for (const a of access) {
     const targets = egress.filter((e) => e.stopId !== a.stopId);
     const results = routeToStops(
@@ -166,6 +168,7 @@ export function composeGeographicJourneys(
         });
       }
     }
+    checkpoint?.(++completedAccessSearches);
   }
   // Pareto filtering retains a later arrival if it saves transfers or walking.
   // The walking criterion is duration only; distance is reported, not scored.
