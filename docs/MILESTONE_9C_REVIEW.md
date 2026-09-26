@@ -214,3 +214,26 @@ The local diagnostic database and running PostGIS service are retained for owner
 review. The retained `dallas_transit` data was not reset or migrated by this pass;
 only the separate copy and test databases received migration 003. No production
 dependency, secret, provider-derived graph or raw response was added to the repo.
+
+## Sparse transfer preparation follow-up
+
+The provider-free `scripts/m9c-transfer-candidates.mjs` dry-run on publication
+`V738-218-217-20260921` produced 27330 directed validation candidates across 6826
+sources. Among sources with candidates, median/p95/max were 3/10/12. These include
+fallback candidates, not accepted pedestrian links. Distance bands (geodesic
+meters) were 6481 at <=100, 7056 at >100–250, 12924 at >250–500 and 869 at >500–800.
+Rail-capable versus other stop classification gave 25525 bus→bus, 1397 bus→rail,
+397 rail→bus and 11 rail→rail candidates. Mixed-mode stops count as rail-capable.
+
+This is 97.24% below the 989596 full-envelope baseline, 90.04% below the 274292
+<=1200 m baseline and 60.54% below the 69256 <=500 m baseline. The station exception
+means the new set is not simply a subset of the last baseline. Frankford
+33777→19300 survives at 375 m geodesic distance without production stop-ID rules.
+The first attempt omitted it in favor of two same-service approaches; a synthetic
+regression now preserves a geographically different fallback around intersections.
+Selection still needs directed pedestrian validation and does not prove any crossing.
+
+The separate transfer policy, calendar overlap, coverage selection, quadrant
+fallback and six-accepted/twelve-attempt bounds are recorded in ADR 0005. The
+100000 safety bound remains unchanged. No provider calls, evidence persistence,
+migrations or production access were used for this follow-up.

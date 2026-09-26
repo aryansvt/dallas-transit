@@ -57,6 +57,35 @@ separate trips remain separate boardings. No stay-seated block inference is adde
 
 ## Consequences
 
+### Sparse transfer preparation
+
+`transfer-candidates.ts` is a separate, provider-free preparation boundary, not
+endpoint discovery or routing. Ordinary transfers use a 500 m geodesic envelope;
+rail interfaces and explicit shared parent stations may use 800 m. This station
+envelope is a candidate search allowance, never a walkability assertion. It does
+not use the 2200 m endpoint rail envelope. Calendars and exceptions supply actual
+overlapping source-alighting/destination-boarding dates for the publication.
+
+Candidates must add route/direction/mode/date coverage beyond boarding at the
+source itself. Greedy selection favors uncovered modes, station interfaces and
+marginal coverage, then distance and stop ID. Two coverage passes retain bounded
+fallbacks rather than filling a list with equivalent stops. The fallback pass
+prefers a different geographic quadrant for the same service coverage, preserving
+alternate approaches around intersections instead of two stops along the same
+approach. Bearings are not pedestrian crossing evidence. Each source has at
+most twelve directed validation candidates and six accepted links. After a
+rejection, `nextTransferCandidate` recomputes utility using only accepted coverage;
+attempted destinations still consume the twelve-attempt budget. The 100000
+publication safety limit is unchanged. No evidence is created by selection.
+
+`node scripts/m9c-transfer-candidates.mjs` performs a read-only dry-run against the
+existing loopback benchmark copy after the ingest workspace is built. It never
+loads provider credentials or publishes links. This heuristic intentionally omits
+walks to redundant same-service stops; calendar overlap does not prove a timed
+connection. Station names, proximity, parent IDs and route modes do not replace
+directed pedestrian validation. Any eventual evidence remains subject to the
+publication, rights, expiry and retention rules above.
+
 More labels and station candidates cost memory/CPU/provider quota. Exhaustive tiny
 network tests cover four-objective correctness; local feed benchmarks measure the
 cost without asserting cloud capacity. The graph is intentionally opt-in while
