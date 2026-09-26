@@ -26,3 +26,4 @@ export type {
   WalkingRequest,
   WalkingResult,
 } from './walking-provider.js';
+export { databaseConnection } from './connection.js';

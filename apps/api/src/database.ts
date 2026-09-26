@@ -1,4 +1,5 @@
 import pg from 'pg';
+import { databaseConnection } from '@dallas-transit/transit-ingest/runtime';
 import { abortable, Capacity } from './async.js';
 import { ApiError } from './errors.js';
 import type { ApiConfig } from './config.js';
@@ -9,7 +10,7 @@ export class ApiDatabase {
   private readonly capacity: Capacity;
   constructor(config: ApiConfig, onIdleError: () => void = () => {}) {
     this.pool = new pg.Pool({
-      connectionString: config.databaseUrl,
+      ...databaseConnection(config.databaseUrl),
       max: config.poolSize,
       connectionTimeoutMillis: 2000,
       idleTimeoutMillis: 30000,

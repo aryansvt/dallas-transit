@@ -248,7 +248,11 @@ async function requestJson(
           }
         : {}),
     });
-    const value: unknown = await response.json();
+    const value: unknown = await response.json().catch(() => {
+      throw new ClientError(
+        response.ok ? 'INVALID_RESPONSE' : 'SERVICE_UNAVAILABLE',
+      );
+    });
     if (!response.ok)
       throw new ClientError(
         record(value) && record(value.error) && text(value.error.code)
@@ -259,7 +263,9 @@ async function requestJson(
   } catch (error) {
     if (signal.aborted) throw new ClientError('REQUEST_CANCELED');
     if (timer.signal.aborted) throw new ClientError('REQUEST_TIMEOUT');
-    throw error;
+    throw error instanceof ClientError
+      ? error
+      : new ClientError('SERVICE_UNAVAILABLE');
   } finally {
     clearTimeout(timeout);
   }

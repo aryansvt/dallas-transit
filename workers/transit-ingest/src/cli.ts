@@ -37,6 +37,10 @@ async function main(): Promise<void> {
     return;
   }
   const command = positionals[0];
+  if (process.env.NODE_ENV === 'production' && !process.env.DATABASE_URL)
+    throw new Error('DATABASE_URL is required in production');
+  if (process.env.NODE_ENV === 'production' && command === 'reset-static-data')
+    throw new Error('Static data reset is disabled in production');
   if (
     positionals.length !== 1 ||
     !['migrate', 'import', 'activate', 'inspect', 'reset-static-data'].includes(
@@ -101,9 +105,16 @@ async function main(): Promise<void> {
 try {
   await main();
 } catch (error) {
-  let message = error instanceof Error ? error.message : String(error);
-  if (process.env.DATABASE_URL)
-    message = message.replaceAll(process.env.DATABASE_URL, '[DATABASE_URL]');
-  process.stderr.write(`${message}\n`);
-  process.exitCode = 1;
+  if (process.env.NODE_ENV === 'production') {
+    process.stderr.write(
+      'GTFS command failed. Check configuration, database health, migration compatibility and command arguments. No data reset was performed.\n',
+    );
+    process.exitCode = 1;
+  } else {
+    let message = error instanceof Error ? error.message : String(error);
+    if (process.env.DATABASE_URL)
+      message = message.replaceAll(process.env.DATABASE_URL, '[DATABASE_URL]');
+    process.stderr.write(`${message}\n`);
+    process.exitCode = 1;
+  }
 }

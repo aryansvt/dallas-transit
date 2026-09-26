@@ -19,10 +19,26 @@ async function start() {
     { logger: true },
     { config, ...(realtime ? { realtime, realtimeAgencyIds } : {}) },
   );
+  let stopping = false;
   const shutdown = () => {
-    void app.close().catch(() => {
-      process.exitCode = 1;
-    });
+    if (stopping) return;
+    stopping = true;
+    // Render gets a bounded shutdown even if an upstream socket fails to close.
+    const deadline = setTimeout(() => {
+      app.log.error(
+        { code: 'SHUTDOWN_TIMEOUT' },
+        'API shutdown exceeded deadline',
+      );
+      process.exit(1);
+    }, 25000);
+    deadline.unref();
+    void app
+      .close()
+      .catch(() => {
+        app.log.error({ code: 'SHUTDOWN_FAILED' }, 'API shutdown failed');
+        process.exit(1);
+      })
+      .finally(() => clearTimeout(deadline));
   };
   for (const signal of ['SIGINT', 'SIGTERM'] as const)
     process.once(signal, shutdown);
