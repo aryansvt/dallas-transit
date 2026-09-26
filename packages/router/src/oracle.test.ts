@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { buildSchedule } from './index.js';
+import { buildSchedule, routeToStops } from './index.js';
 import type { RoutingSchedule } from './index.js';
 import { assertJourney, input, query, trip, visit } from './test-support.js';
 
@@ -11,68 +11,96 @@ function exhaustive(
   departure: number,
   maxBoardings: number,
 ) {
-  const arrivals = new Map<number, number>();
-  const linksFrom = (origin: string, time: number) => {
-    const times = new Map<string, number>([[origin, time]]);
-    for (let pass = 1; pass < schedule.stops.length; pass++)
-      for (const link of schedule.transfers) {
-        const reached = times.get(link.fromStopId);
-        if (
-          reached !== undefined &&
-          reached + link.durationSeconds <
-            (times.get(link.toStopId) ?? Infinity)
-        )
-          times.set(link.toStopId, reached + link.durationSeconds);
-      }
-    return times;
-  };
-  function explore(stop: string, time: number, boardings: number): void {
+  const outcomes: number[][] = [];
+  function explore(
+    stop: string,
+    time: number,
+    boardings: number,
+    walking: number,
+    risk: number,
+  ): void {
     if (boardings === maxBoardings) return;
-    const reachable = boardings
-      ? linksFrom(stop, time)
-      : new Map([[stop, time]]);
-    for (const [boardStop, reached] of reachable) {
+    const reachable: { stop: string; time: number; walking: number }[] = [];
+    function links(
+      at: string,
+      arr: number,
+      walk: number,
+      seen: Set<string>,
+      used: boolean,
+      anyLink: boolean,
+    ) {
+      reachable.push({ stop: at, time: arr, walking: walk });
+      if (!boardings || used) return;
+      for (const l of schedule.transfers)
+        if (
+          l.fromStopId === at &&
+          !seen.has(l.toStopId) &&
+          !(l.pedestrian && anyLink)
+        )
+          links(
+            l.toStopId,
+            arr + l.durationSeconds,
+            walk + (l.pedestrian ? l.durationSeconds : 0),
+            new Set([...seen, l.toStopId]),
+            !!l.pedestrian,
+            true,
+          );
+    }
+    links(stop, time, walking, new Set([stop]), false, false);
+    for (const reach of reachable) {
       const ready =
-        reached +
+        reach.time +
         (boardings
-          ? schedule.stops.find((s) => s.id === boardStop)!.changeSeconds
+          ? schedule.stops.find((s) => s.id === reach.stop)!.changeSeconds
           : 0);
-      for (const candidate of schedule.trips)
-        for (let b = 0; b < candidate.events.length; b++) {
-          const board = candidate.events[b]!;
+      for (const t of schedule.trips)
+        for (let b = 0; b < t.events.length; b++) {
+          const boarding = t.events[b]!;
           if (
-            board.stopId !== boardStop ||
-            board.pickup !== 0 ||
-            board.departure === null ||
-            board.departure < ready
+            boarding.stopId !== reach.stop ||
+            boarding.pickup !== 0 ||
+            boarding.departure === null ||
+            boarding.departure < ready
           )
             continue;
-          for (let a = b + 1; a < candidate.events.length; a++) {
-            const alight = candidate.events[a]!;
+          const nextRisk =
+            risk +
+            (boardings ? Math.max(0, 300 - (boarding.departure - ready)) : 0);
+          for (let a = b + 1; a < t.events.length; a++) {
+            const alight = t.events[a]!;
             if (alight.dropOff !== 0 || alight.arrival === null) continue;
             if (alight.stopId === 'D')
-              arrivals.set(
+              outcomes.push([
                 boardings + 1,
-                Math.min(
-                  arrivals.get(boardings + 1) ?? Infinity,
-                  alight.arrival,
-                ),
-              );
-            explore(alight.stopId, alight.arrival, boardings + 1);
+                alight.arrival,
+                reach.walking,
+                nextRisk,
+              ]);
+            explore(
+              alight.stopId,
+              alight.arrival,
+              boardings + 1,
+              reach.walking,
+              nextRisk,
+            );
           }
         }
     }
   }
-  explore('A', departure, 0);
-  let best = Infinity;
-  return [...arrivals]
-    .sort(([a], [b]) => a - b)
-    .filter(([, arrival]) => {
-      if (arrival >= best) return false;
-      best = arrival;
-      return true;
-    })
-    .sort((a, b) => a[1] - b[1]);
+  explore('A', departure, 0, 0, 0);
+  return uniqueMetrics(
+    outcomes.filter(
+      (b) =>
+        !outcomes.some(
+          (a) => a.every((v, i) => v <= b[i]!) && a.some((v, i) => v < b[i]!),
+        ),
+    ),
+  );
+}
+function uniqueMetrics(values: number[][]) {
+  return [...new Set(values.map((v) => JSON.stringify(v)))]
+    .sort()
+    .map((v) => JSON.parse(v) as number[]);
 }
 
 it('matches exhaustive Pareto enumeration and itinerary invariants on 160 deterministic small networks', () => {
@@ -108,6 +136,14 @@ it('matches exhaustive Pareto enumeration and itinerary invariants on 160 determ
           fromStopId: stops[random(4)]!,
           toStopId: stops[random(4)]!,
           durationSeconds: random(8),
+          ...(random(2)
+            ? {
+                pedestrian: {
+                  distanceMeters: random(20),
+                  provenance: 'synthetic',
+                },
+              }
+            : {}),
         })),
       }),
     );
@@ -115,11 +151,40 @@ it('matches exhaustive Pareto enumeration and itinerary invariants on 160 determ
       const result = query(schedule, { departureTime, maxTransfers: 2 });
       const actual =
         result.status === 'ok'
-          ? result.journeys.map((j) => [j.boardingCount, j.arrivalTime])
+          ? uniqueMetrics(
+              result.journeys.map((j) => [
+                j.boardingCount,
+                j.arrivalTime,
+                j.walkingDurationSeconds,
+                j.scheduledTransferRisk,
+              ]),
+            )
           : [];
       expect(actual, `fixture ${fixture}, departure ${departureTime}`).toEqual(
         exhaustive(schedule, departureTime, 3),
       );
+      const batched = routeToStops(
+        schedule,
+        {
+          serviceDate: schedule.serviceDate,
+          originStopId: 'A',
+          departureTime,
+          maxTransfers: 2,
+        },
+        ['B', 'C', 'D'],
+      ).get('D')!;
+      const batchedMetrics =
+        batched.status === 'ok'
+          ? uniqueMetrics(
+              batched.journeys.map((j) => [
+                j.boardingCount,
+                j.arrivalTime,
+                j.walkingDurationSeconds,
+                j.scheduledTransferRisk,
+              ]),
+            )
+          : [];
+      expect(batchedMetrics).toEqual(actual);
       if (result.status === 'ok')
         result.journeys.forEach((j) => assertJourney(schedule, j));
     }

@@ -199,7 +199,7 @@ describe('geographic composition without providers or persistence', () => {
       [260, 20],
     ]);
   });
-  it('uses a stable canonical representative for equivalent journeys', () => {
+  it('keeps distinct services with equivalent metrics in stable order', () => {
     const schedule = buildSchedule(
       input([
         trip('a', ['A', 'D'], [100, 200]),
@@ -214,7 +214,7 @@ describe('geographic composition without providers or persistence', () => {
     );
     expect(
       journeys(composeGeographicJourneys(schedule, request, [b, a], [e])),
-    ).toHaveLength(1);
+    ).toHaveLength(2);
   });
   it('preserves explicit interchange legs and keeps their unmeasured walking separate', () => {
     const schedule = buildSchedule(
@@ -382,4 +382,50 @@ describe('geographic validation and budgets', () => {
   ])('rejects invalid or inconsistent bounds %j', (overrides) => {
     expect(() => geographicPolicy(overrides)).toThrow();
   });
+});
+
+it('keeps distinct tied services but suppresses endpoint variants of the same trip', () => {
+  const schedule = buildSchedule(
+    input([
+      trip('one', ['A', 'B', 'D'], [100, 100, 200]),
+      trip('two', ['A', 'D'], [100, 200]),
+    ]),
+  );
+  const decisions: string[] = [];
+  const result = journeys(
+    composeGeographicJourneys(
+      schedule,
+      request,
+      [candidate('A', 0, 'access'), candidate('B', 0, 'access')],
+      [candidate('D', 0, 'egress')],
+      {},
+      (_j, d) => decisions.push(d),
+    ),
+  );
+  expect(result).toHaveLength(2);
+  expect(decisions).toContain('same-rides');
+});
+it('reserves a later direct alternative under the three-result cap without changing earliest-first ordering', () => {
+  const schedule = buildSchedule(
+    input([
+      trip('f1', ['A', 'B'], [100, 200]),
+      trip('f2', ['B', 'C'], [500, 550]),
+      trip('f3', ['C', 'D'], [850, 900]),
+      trip('m1', ['A', 'E'], [100, 400]),
+      trip('m2', ['E', 'D'], [750, 950]),
+      trip('direct', ['A', 'D'], [100, 1000]),
+      trip('other', ['X', 'D'], [100, 1100]),
+    ]),
+  );
+  const result = journeys(
+    composeGeographicJourneys(
+      schedule,
+      request,
+      [candidate('A', 50, 'access'), candidate('X', 0, 'access')],
+      [candidate('D', 0, 'egress')],
+    ),
+  );
+  expect(result).toHaveLength(3);
+  expect(result.map((j) => j.arrivalTime)).toEqual([900, 1000, 1100]);
+  expect(result.map((j) => j.transferCount)).toEqual([2, 0, 0]);
 });

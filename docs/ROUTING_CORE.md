@@ -1,5 +1,12 @@
 # Schedule routing core
 
+> M9C supersedes the original milestone algorithm/limits described below. Current
+> behavior is specified in [ADR 0005](adr/0005-routing-quality-and-pedestrian-evidence.md)
+> and the [M9C review](MILESTONE_9C_REVIEW.md): four-objective labels, validated
+> pedestrian links, total walking accounting, service-aware endpoint shortlists,
+> up to six accepted endpoints per side, sixteen provider calls and 36 pair searches.
+> The remaining text preserves the original milestone rationale and CLI history.
+
 Milestone 3 implements stop-to-stop scheduled journeys in `packages/router`.
 The package has **no production dependencies**. It owns the immutable schedule,
 pattern indexes, boarding rounds, predecessor records, machine-readable journeys,

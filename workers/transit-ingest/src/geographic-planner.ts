@@ -10,11 +10,7 @@ import {
   type RoutingSchedule,
   type WalkingCandidate,
 } from '@dallas-transit/router';
-import type {
-  CandidateSource,
-  NearbyResult,
-  NearbyStop,
-} from './nearby-stops.js';
+import type { CandidateSource, NearbyResult } from './nearby-stops.js';
 import {
   requestWalkingRoute,
   type WalkingProvider,
@@ -37,6 +33,8 @@ export interface WalkingAttempt {
   readonly phase: 'access' | 'egress';
   readonly stopId: string;
   readonly result: WalkingResult;
+  readonly rejection?:
+    'no-pedestrian-route' | 'walking-budget' | 'provider-unavailable';
 }
 type NoJourneyReason =
   | Extract<GeographicCompositionResult, { status: 'no-journey' }>['reason']
@@ -116,8 +114,8 @@ export async function planGeographicJourney(
   if (candidates.publicationId !== schedule.publicationId)
     throw new Error('Candidate publication mismatch');
   if (
-    candidates.access.length > policy.maxAccessCandidates ||
-    candidates.egress.length > policy.maxEgressCandidates
+    candidates.access.length > (policy.shortlistLimit ?? 32) ||
+    candidates.egress.length > (policy.shortlistLimit ?? 32)
   )
     throw new Error('Candidate source exceeded policy');
   const stopIds = new Set(schedule.stops.map((s) => s.id));
@@ -131,7 +129,8 @@ export async function planGeographicJourney(
         seen.has(c.stopId) ||
         !Number.isFinite(c.candidateDistanceMeters) ||
         c.candidateDistanceMeters < 0 ||
-        c.candidateDistanceMeters > policy.radiusMeters
+        c.candidateDistanceMeters >
+          Math.max(policy.radiusMeters, policy.stationRadiusMeters ?? 2200)
       )
         throw new Error('Invalid nearby candidate');
       seen.add(c.stopId);
@@ -151,70 +150,87 @@ export async function planGeographicJourney(
       status: 'no-journey',
       reason: 'walking-provider-unavailable',
     });
-  const jobs: { phase: 'access' | 'egress'; stop: NearbyStop }[] = [
-    ...candidates.access.map((stop) => ({ phase: 'access' as const, stop })),
-    ...candidates.egress.map((stop) => ({ phase: 'egress' as const, stop })),
-  ];
-  let next = 0;
-  let timedOut = false;
+  const access: WalkingCandidate[] = [],
+    egress: WalkingCandidate[] = [];
   const providerStarted = performance.now();
-  await Promise.all(
-    Array.from(
-      { length: Math.min(policy.providerConcurrency, jobs.length) },
-      async () => {
-        for (;;) {
-          signal?.throwIfAborted();
-          const index = next++;
-          const job = jobs[index];
-          if (!job) break;
-          const callStarted = performance.now();
-          // Do not start more work after a timeout: an uncooperative provider may
-          // still be running despite abort. The total in-flight bound remains intact.
-          let result: WalkingResult = {
-            status: 'unavailable',
-            reason: 'timeout',
-          };
-          if (!timedOut) {
-            metrics.providerCalls++;
-            result = await requestWalkingRoute(
-              provider,
-              {
-                origin:
-                  job.phase === 'access' ? request.origin : job.stop.coordinate,
-                destination:
-                  job.phase === 'access'
-                    ? job.stop.coordinate
-                    : request.destination,
-              },
-              policy.providerTimeoutMs,
-              signal,
-            );
-            metrics.providerCallMs[index] = performance.now() - callStarted;
-          } else metrics.providerCallMs[index] = 0;
-          if (result.status === 'unavailable' && result.reason === 'timeout')
-            timedOut = true;
-          walkingAttempts[index] = {
-            phase: job.phase,
-            stopId: job.stop.stopId,
-            result,
-          };
-        }
-      },
-    ),
-  );
+  let timedOut = false;
+  const phaseAttempts: WalkingAttempt[][] = [[], []];
+  const runPhase = async (phase: 'access' | 'egress', phaseIndex: number) => {
+    const selected = phase === 'access' ? access : egress;
+    const target =
+      phase === 'access'
+        ? policy.maxAccessCandidates
+        : policy.maxEgressCandidates;
+    // Reserve each endpoint's initial allocation; divide the remaining refill
+    // budget deterministically so response timing cannot change selection.
+    const extra =
+      policy.maxProviderCalls -
+      policy.maxAccessCandidates -
+      policy.maxEgressCandidates;
+    const budget =
+      target +
+      (phaseIndex === 0 ? Math.ceil(extra / 2) : Math.floor(extra / 2));
+    for (const stop of candidates!.status === 'ok' ? candidates![phase] : []) {
+      if (
+        selected.length >= target ||
+        phaseAttempts[phaseIndex]!.length >= budget
+      )
+        break;
+      signal?.throwIfAborted();
+      const started = performance.now();
+      let result: WalkingResult = { status: 'unavailable', reason: 'timeout' };
+      if (!timedOut) {
+        metrics.providerCalls++;
+        result = await requestWalkingRoute(
+          provider,
+          {
+            origin: phase === 'access' ? request.origin : stop.coordinate,
+            destination:
+              phase === 'access' ? stop.coordinate : request.destination,
+          },
+          policy.providerTimeoutMs,
+          signal,
+        );
+      }
+      metrics.providerCallMs.push(performance.now() - started);
+      if (result.status === 'unavailable' && result.reason === 'timeout')
+        timedOut = true;
+      let overBudget = false;
+      if (
+        result.status === 'ok' &&
+        (result.route.durationSeconds >
+          (policy.maxWalkingDurationSeconds ?? 1800) ||
+          result.route.distanceMeters >
+            (policy.maxWalkingDistanceMeters ?? 2500))
+      ) {
+        overBudget = true;
+        result = { status: 'no-route' };
+      }
+      phaseAttempts[phaseIndex]!.push({
+        phase,
+        stopId: stop.stopId,
+        result,
+        ...(result.status === 'ok'
+          ? {}
+          : {
+              rejection: overBudget
+                ? 'walking-budget'
+                : result.status === 'unavailable'
+                  ? 'provider-unavailable'
+                  : 'no-pedestrian-route',
+            }),
+      });
+      if (result.status === 'ok')
+        selected.push({ ...stop, walk: result.route });
+    }
+  };
+  if (policy.providerConcurrency === 1) {
+    await runPhase('access', 0);
+    await runPhase('egress', 1);
+  } else await Promise.all([runPhase('access', 0), runPhase('egress', 1)]);
+  walkingAttempts.push(...phaseAttempts.flat());
   metrics.providerBatchMs = performance.now() - providerStarted;
   signal?.throwIfAborted();
-  const access: WalkingCandidate[] = [];
-  const egress: WalkingCandidate[] = [];
-  for (let i = 0; i < jobs.length; i++) {
-    const attempt = walkingAttempts[i]!;
-    if (attempt.result.status !== 'ok') continue;
-    const job = jobs[i]!;
-    (job.phase === 'access' ? access : egress).push({
-      ...job.stop,
-      walk: attempt.result.route,
-    });
-  }
   for (const [phase, reachable] of [
     ['access', access],
     ['egress', egress],

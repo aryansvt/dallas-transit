@@ -6,8 +6,26 @@ import type {
 } from '@dallas-transit/shared';
 export const transitLegs = (j: GeographicJourney): TransitLeg[] =>
   j.legs.filter((l): l is TransitLeg => l.kind === 'transit');
-export const routeName = (route: RouteDetails | undefined) =>
-  route?.shortName || route?.longName || 'Transit service';
+export function transitMode(
+  route: RouteDetails | undefined,
+): 'bus' | 'train' | 'service' {
+  if (route?.type === 3) return 'bus';
+  if (route && [0, 1, 2].includes(route.type)) return 'train';
+  return 'service';
+}
+export function routeName(route: RouteDetails | undefined) {
+  if (!route) return 'Transit service';
+  const name = route.shortName || route.longName || 'Transit service';
+  if (transitMode(route) === 'bus') return `Bus ${name}`;
+  if (transitMode(route) === 'train') {
+    if (
+      ['RED', 'BLUE', 'GREEN', 'ORANGE', 'SILVER'].includes(name.toUpperCase())
+    )
+      return `${name[0]!.toUpperCase()}${name.slice(1).toLowerCase()} Line`;
+    return name;
+  }
+  return route.longName || name;
+}
 export const stopName = (refs: References, id: string) =>
   refs.stops.find((s) => s.stopId === id)?.name ?? 'Transit stop';
 export function distinction(
@@ -19,10 +37,11 @@ export function distinction(
     key: 'arrivalTime' | 'transferCount' | 'walkingDurationSeconds',
   ) => all.every((j) => j === journey || journey[key] < j[key]);
   if (uniqueMinimum('arrivalTime')) return 'Fastest';
-  if (uniqueMinimum('walkingDurationSeconds')) return 'Least walking';
   // Zero transfers is factual even when multiple direct services tie.
+  if (uniqueMinimum('transferCount'))
+    return journey.transferCount === 0 ? 'No transfers' : 'Fewest transfers';
+  if (uniqueMinimum('walkingDurationSeconds')) return 'Least walking';
   if (journey.transferCount === 0) return 'No transfers';
-  if (uniqueMinimum('transferCount')) return 'Fewest transfers';
   return '';
 }
 export function routeColors(route: RouteDetails | undefined) {

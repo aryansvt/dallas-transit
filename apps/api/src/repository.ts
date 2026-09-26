@@ -109,7 +109,13 @@ export function postgresRepository(
           changeSeconds: config.changeSeconds,
         });
         return loaded.status === 'loaded'
-          ? { schedule: loaded.schedule, preparationMs: loaded.metrics.totalMs }
+          ? {
+              schedule: loaded.schedule,
+              preparationMs: loaded.metrics.totalMs,
+              ...(loaded.expiresAt === undefined
+                ? {}
+                : { expiresAt: loaded.expiresAt }),
+            }
           : null;
       }),
     candidates: {
@@ -135,13 +141,14 @@ export function postgresRepository(
         to_regclass('public.transit_schema_migrations') IS NOT NULL
         AND to_regclass('static_gtfs.feed_activation') IS NOT NULL
         AND to_regclass('static_gtfs.stop_times') IS NOT NULL
+        AND to_regclass('static_gtfs.pedestrian_links') IS NOT NULL
         AND to_regclass('static_gtfs.stops_search_name') IS NOT NULL
         AND to_regprocedure('static_gtfs.service_is_active(uuid,text,date)') IS NOT NULL
         AND EXISTS (SELECT 1 FROM pg_extension WHERE extname='postgis') AS valid`);
         if (!schema.rows[0]?.valid)
           return { database: true, schema: false, schedule: false };
         const ledger = await db.query<{ valid: boolean }>(
-          `SELECT count(*) = 2 AS valid FROM public.transit_schema_migrations WHERE name IN ('001_static_gtfs.sql', '002_stop_search.sql')`,
+          `SELECT count(*) = 3 AS valid FROM public.transit_schema_migrations WHERE name IN ('001_static_gtfs.sql', '002_stop_search.sql', '003_pedestrian_interchanges.sql')`,
         );
         if (!ledger.rows[0]?.valid)
           return { database: true, schema: false, schedule: false };

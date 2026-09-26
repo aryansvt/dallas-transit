@@ -10,6 +10,7 @@ import {
   routeName,
   stopName,
   transitLegs,
+  transitMode,
 } from '../lib/presentation';
 import { duration, serviceTime } from '../lib/time';
 import { Icon } from './icon';
@@ -33,7 +34,13 @@ export function JourneyTime({
 export function RouteBadge({ route }: { route: RouteDetails | undefined }) {
   return (
     <span className="route-badge" style={routeColors(route)}>
-      <Icon name={route?.type === 3 ? 'bus' : 'train'} />
+      <Icon
+        name={
+          transitMode(route) === 'service'
+            ? 'arrow'
+            : (transitMode(route) as 'bus' | 'train')
+        }
+      />
       {routeName(route)}
     </span>
   );
@@ -193,17 +200,31 @@ export function Timeline({
             return (
               <li className="timeline-step transfer-step" key={i}>
                 <span className="timeline-dot">
-                  <Icon name="arrow" />
+                  <Icon name={leg.pedestrian ? 'walk' : 'arrow'} />
                 </span>
                 <div className="step-content">
-                  <h3>Transfer to {stopName(references, leg.toStopId)}</h3>
+                  <h3>
+                    {leg.pedestrian ? 'Walk' : 'Transfer'} to{' '}
+                    {stopName(references, leg.toStopId)}
+                  </h3>
                   <p>
                     From {stopName(references, leg.fromStopId)} ·{' '}
                     {duration(leg.arrivalTime - leg.departureTime)}
+                    {leg.pedestrian && (
+                      <>
+                        {' '}
+                        {'\u00b7'} {Math.round(leg.pedestrian.distanceMeters)} m
+                      </>
+                    )}
                   </p>
                 </div>
               </li>
             );
+          const priorRide = journey.legs
+            .slice(0, i)
+            .filter((l) => l.kind === 'transit')
+            .at(-1);
+          const sameRouteChange = priorRide?.routeId === leg.routeId;
           const transferring = journey.legs
             .slice(0, i)
             .some((previous) => previous.kind === 'transit');
@@ -234,12 +255,19 @@ export function Timeline({
               )}
               <li className="timeline-step ride-step">
                 <span className="timeline-dot ride-dot">
-                  <Icon name={route?.type === 3 ? 'bus' : 'train'} />
+                  <Icon
+                    name={
+                      transitMode(route) === 'service'
+                        ? 'arrow'
+                        : (transitMode(route) as 'bus' | 'train')
+                    }
+                  />
                 </span>
                 <div className="step-content">
                   <div className="step-heading">
                     <h3>
-                      Board <RouteBadge route={route} />
+                      {sameRouteChange ? 'Change vehicles: board' : 'Board'}{' '}
+                      <RouteBadge route={route} />
                     </h3>
                     <JourneyTime
                       date={journey.serviceDate}

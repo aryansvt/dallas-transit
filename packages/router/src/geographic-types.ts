@@ -31,6 +31,11 @@ export interface GeographicRequest {
 
 export interface GeographicPolicy {
   readonly radiusMeters: number;
+  /** Separate station envelope; only active rail/station service may use it. */
+  readonly stationRadiusMeters?: number;
+  readonly shortlistLimit?: number;
+  readonly maxWalkingDurationSeconds?: number;
+  readonly maxWalkingDistanceMeters?: number;
   readonly maxAccessCandidates: number;
   readonly maxEgressCandidates: number;
   readonly maxProviderCalls: number;
@@ -60,11 +65,13 @@ export interface GeographicJourney {
   readonly durationSeconds: number;
   readonly boardingCount: number;
   readonly transferCount: number;
-  /** Sum of provider-reported access and egress; interchange links are separate. */
+  /** Access + validated pedestrian interchanges + egress. */
   readonly walkingDurationSeconds: number;
   readonly walkingDistanceMeters: number;
   /** Supplied M3 interchange links have duration but no pedestrian distance. */
   readonly interchangeDurationSeconds: number;
+  /** Scheduled slack shortfall, not a probability or live confidence. */
+  readonly scheduledTransferRisk?: number;
   readonly legs: readonly (WalkingLeg | JourneyLeg)[];
 }
 

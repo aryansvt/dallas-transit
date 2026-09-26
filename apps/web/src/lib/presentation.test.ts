@@ -1,5 +1,10 @@
 import { expect, it } from 'vitest';
-import { distinction, routeColors } from './presentation';
+import {
+  distinction,
+  routeColors,
+  routeName,
+  transitMode,
+} from './presentation';
 import { journeyPoints } from './map-points';
 import {
   previewDestination,
@@ -46,4 +51,45 @@ it('produces only relevant points and collapses a same-stop transfer', () => {
     'Transfer: Akard Station',
   );
   expect(points.every((p) => !('geometry' in p))).toBe(true);
+});
+
+it('names each rail service and capitalizes bus instructions without raw IDs', () => {
+  const base = previewResponse().references.routes[0]!;
+  for (const color of ['Red', 'Blue', 'Green', 'Orange', 'Silver'])
+    expect(
+      routeName({
+        ...base,
+        shortName: color.toUpperCase(),
+        type: color === 'Silver' ? 2 : 0,
+      }),
+    ).toBe(`${color} Line`);
+  expect(routeName({ ...base, shortName: 'TRE', type: 2 })).toBe('TRE');
+  expect(routeName({ ...base, shortName: '244', type: 3 })).toBe('Bus 244');
+  expect(transitMode({ ...base, type: 4 })).toBe('service');
+});
+it('keeps tied fastest badges factual and prioritizes fewer transfers over walking', () => {
+  const base = previewResponse().journeys[0]!;
+  const a = {
+    ...base,
+    arrivalTime: 1000,
+    transferCount: 1,
+    walkingDurationSeconds: 200,
+  };
+  const b = {
+    ...base,
+    arrivalTime: 1000,
+    transferCount: 2,
+    walkingDurationSeconds: 100,
+  };
+  const c = {
+    ...base,
+    arrivalTime: 1100,
+    transferCount: 2,
+    walkingDurationSeconds: 300,
+  };
+  expect(distinction(a, [a, b, c])).toBe('Fewest transfers');
+  expect(distinction(b, [a, b, c])).toBe('Least walking');
+  expect(distinction(c, [a, b, c])).toBe('');
+  const winner = { ...a, walkingDurationSeconds: 50 };
+  expect(distinction(winner, [winner, b, c])).toBe('Fewest transfers');
 });

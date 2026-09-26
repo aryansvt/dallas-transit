@@ -3,6 +3,7 @@ import { abortable, Capacity } from './async.js';
 import { ApiError } from './errors.js';
 
 export interface PreparedSchedule {
+  readonly expiresAt?: number;
   readonly schedule: RoutingSchedule;
   readonly preparationMs: number;
 }
@@ -84,7 +85,10 @@ export class PreparedSchedules {
               this.entries.set(key, {
                 value,
                 date,
-                expires: this.now() + this.options.ttlMs,
+                expires: Math.min(
+                  this.now() + this.options.ttlMs,
+                  value.expiresAt ?? Infinity,
+                ),
               });
               while (this.entries.size > this.options.maximum)
                 this.entries.delete(this.entries.keys().next().value!);

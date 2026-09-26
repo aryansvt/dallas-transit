@@ -127,16 +127,27 @@ export const legSchema = {
       alightingSequence: integer,
       ...timing,
     }),
-    object({
-      kind: { const: 'transfer' },
-      transferId: string,
-      fromStopId: string,
-      toStopId: string,
-      ...timing,
-    }),
+    object(
+      {
+        kind: { const: 'transfer' },
+        transferId: string,
+        fromStopId: string,
+        toStopId: string,
+        pedestrian: object({ distanceMeters: number, provenance: string }),
+        ...timing,
+      },
+      [
+        'kind',
+        'transferId',
+        'fromStopId',
+        'toStopId',
+        'departureTime',
+        'arrivalTime',
+      ],
+    ),
   ],
 };
-export const journeySchema = object({
+const journeyProperties = {
   publicationId: string,
   serviceDate: string,
   origin: coordinateSchema,
@@ -151,8 +162,13 @@ export const journeySchema = object({
   walkingDurationSeconds: number,
   walkingDistanceMeters: number,
   interchangeDurationSeconds: number,
+  scheduledTransferRisk: number,
   legs: array(legSchema),
-});
+};
+export const journeySchema = object(
+  journeyProperties,
+  Object.keys(journeyProperties).filter((k) => k !== 'scheduledTransferRisk'),
+);
 const context = {
   publicationId: string,
   serviceDate: string,

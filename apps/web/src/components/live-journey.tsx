@@ -7,7 +7,12 @@ import type {
   References,
 } from '@dallas-transit/shared';
 import { ClientError, errorMessage, type TransitClient } from '../lib/api';
-import { routeColors, routeName, stopName } from '../lib/presentation';
+import {
+  routeColors,
+  routeName,
+  stopName,
+  transitMode,
+} from '../lib/presentation';
 import { serviceTime } from '../lib/time';
 import { Icon } from './icon';
 
@@ -251,13 +256,8 @@ export function LiveJourneyPanel({
   const route = references.routes.find(
     (r) => r.routeId === actionableRide?.leg.routeId,
   );
-  const mode =
-    route?.type === 3
-      ? 'bus'
-      : route && [0, 1, 2].includes(route.type)
-        ? 'train'
-        : 'service';
-  const rideName = `${mode} ${routeName(route)}`;
+  const mode = transitMode(route);
+  const rideName = routeName(route);
   const headsign = references.trips.find(
     (t) => t.tripId === actionableRide?.leg.tripId,
   )?.headsign;
@@ -309,7 +309,7 @@ export function LiveJourneyPanel({
         {actionableRide && (
           <div className="live-route-identity">
             <span className="route-badge" style={routeColors(route)}>
-              <Icon name={mode === 'bus' ? 'bus' : 'train'} />
+              <Icon name={mode === 'service' ? 'arrow' : mode} />
               <span>{rideName}</span>
             </span>
             {headsign && <span>Toward {headsign}</span>}

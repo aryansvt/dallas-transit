@@ -175,7 +175,7 @@ it('shows one native primary boarding button and progresses only after explicit 
     [...container.querySelectorAll('button')].filter((b) =>
       b.textContent?.startsWith('I’m on'),
     );
-  expect(boarding().map((b) => b.textContent)).toEqual(['I’m on bus 244']);
+  expect(boarding().map((b) => b.textContent)).toEqual(['I’m on Bus 244']);
   const first = boarding()[0]!;
   expect(first.type).toBe('button');
   expect(first.classList.contains('primary-button')).toBe(true);
@@ -187,21 +187,21 @@ it('shows one native primary boarding button and progresses only after explicit 
   ).toContain('Board at');
   expect(
     container.querySelector('.live-route-identity')?.textContent,
-  ).toContain('bus 244');
+  ).toContain('Bus 244');
   expect(container.querySelector('.live-status')?.textContent).toBe(
     'Scheduled',
   );
   await tick(16000); // Polling and elapsed time cannot board for the rider.
-  expect(boarding()[0]?.textContent).toBe('I’m on bus 244');
+  expect(boarding()[0]?.textContent).toBe('I’m on Bus 244');
   expect(container.querySelector('.live-onboard')).toBeNull();
   for (const number of ['244', '238', '022']) {
     expect(boarding().map((b) => b.textContent)).toEqual([
-      `I’m on bus ${number}`,
+      `I’m on Bus ${number}`,
     ]);
-    await click(`I’m on bus ${number}`);
+    await click(`I’m on Bus ${number}`);
     expect(boarding()).toHaveLength(0);
     expect(container.querySelector('.live-onboard')?.textContent).toBe(
-      `You confirmed you’re on bus ${number}.`,
+      `You confirmed you’re on Bus ${number}.`,
     );
     expect(
       container.querySelector('.live-next-action h3')?.textContent,
@@ -261,7 +261,7 @@ it('retains scheduled transfer guidance when live requests fail', async () => {
     'Scheduled',
   );
   expect(container.querySelectorAll('.live-transfer-note')).toHaveLength(1);
-  expect(button('I’m on bus 244')).toBeTruthy();
+  expect(button('I’m on Bus 244')).toBeTruthy();
 });
 async function click(prefix: string) {
   await act(async () => button(prefix).click());

@@ -7,6 +7,7 @@ import type {
 import { compareIds, identifier, integer, serviceDate } from './validation.js';
 
 interface ScheduleIndexes {
+  readonly canReach: (from: number, to: number) => boolean;
   readonly stopIndex: ReadonlyMap<string, number>;
   readonly patternsAtStop: readonly (readonly number[])[];
   readonly transfersAtStop: readonly (readonly number[])[];
@@ -115,7 +116,24 @@ export function buildSchedule(input: ScheduleInput): RoutingSchedule {
       requireStop(link.fromStopId);
       requireStop(link.toStopId);
       integer(link.durationSeconds, 'transfer duration');
-      return Object.freeze({ ...link });
+      if (link.pedestrian) {
+        if (
+          !Number.isFinite(link.pedestrian.distanceMeters) ||
+          link.pedestrian.distanceMeters < 0 ||
+          link.pedestrian.distanceMeters > 2500 ||
+          link.durationSeconds > 1800
+        )
+          throw new Error(
+            'Pedestrian interchange exceeds 2500 m / 1800 s envelope',
+          );
+        identifier(link.pedestrian.provenance, 'pedestrian provenance');
+      }
+      return Object.freeze({
+        ...link,
+        ...(link.pedestrian
+          ? { pedestrian: Object.freeze({ ...link.pedestrian }) }
+          : {}),
+      });
     })
     .sort((a, b) => compareIds(a.id, b.id));
   const transfersAtStop: number[][] = stops.map(() => []);
@@ -132,7 +150,38 @@ export function buildSchedule(input: ScheduleInput): RoutingSchedule {
     transfers: Object.freeze(transfers),
     eventCount: trips.reduce((sum, trip) => sum + trip.events.length, 0),
   });
+  // Directed reachability overapproximates feasible travel: it ignores time,
+  // boarding permissions and walking-chain limits, so it can only miss an early
+  // rejection, never reject a feasible route. Deduplicate shared trip edges.
+  const adjacency = stops.map(() => new Set<number>());
+  for (const trip of trips)
+    for (let i = 1; i < trip.events.length; i++)
+      adjacency[requireStop(trip.events[i - 1]!.stopId)]!.add(
+        requireStop(trip.events[i]!.stopId),
+      );
+  for (const link of transfers)
+    adjacency[requireStop(link.fromStopId)]!.add(requireStop(link.toStopId));
+  const reachability = new Map<number, Uint8Array>();
+  const canReach = (from: number, to: number) => {
+    let visited = reachability.get(from);
+    if (!visited) {
+      visited = new Uint8Array(stops.length);
+      visited[from] = 1;
+      const queue = [from];
+      for (let i = 0; i < queue.length; i++)
+        for (const next of adjacency[queue[i]!]!)
+          if (!visited[next]) {
+            visited[next] = 1;
+            queue.push(next);
+          }
+      if (reachability.size >= 32)
+        reachability.delete(reachability.keys().next().value!);
+      reachability.set(from, visited);
+    }
+    return visited[to] === 1;
+  };
   indexes.set(result, {
+    canReach,
     stopIndex,
     patternsAtStop,
     transfersAtStop,

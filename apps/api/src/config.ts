@@ -8,12 +8,12 @@ import { geoapifyWalkingProvider } from './geoapify-walking.js';
 // Server-owned; request overrides cannot raise these budgets.
 export const API_POLICY = geographicPolicy({
   radiusMeters: 1200,
-  maxAccessCandidates: 4,
-  maxEgressCandidates: 4,
-  maxProviderCalls: 8,
+  maxAccessCandidates: 6,
+  maxEgressCandidates: 6,
+  maxProviderCalls: 16,
   providerConcurrency: 2,
   providerTimeoutMs: 3000,
-  maxTransitSearches: 16,
+  maxTransitSearches: 36,
   maxJourneys: 3,
 });
 export const MAX_TRANSFERS = 3;
