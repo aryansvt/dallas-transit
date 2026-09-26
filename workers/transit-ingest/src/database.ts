@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { readFile, readdir } from 'node:fs/promises';
 import pg from 'pg';
+import { databaseConnection } from './connection.js';
 
 export type Database = pg.Client;
 export const localDatabaseUrl =
@@ -10,7 +11,7 @@ export async function connectDatabase(
   connectionString: string,
 ): Promise<Database> {
   const client = new pg.Client({
-    connectionString,
+    ...databaseConnection(connectionString),
     connectionTimeoutMillis: 10000,
     application_name: 'dallas-transit-static-ingest',
   });

@@ -36,6 +36,8 @@ jobs:
         env:
           # Format-valid fixture only. Build performs no authenticated provider calls.
           NEXT_PUBLIC_MAPBOX_TOKEN: pk.ci-build-placeholder
+          TRANSIT_API_ORIGIN: https://api.example.invalid
+          TRANSIT_PROXY_KEY: ci-build-placeholder-not-a-real-secret
       - run: pnpm api:validate --mode fixture
       - run: pnpm infra:config
       - run: pnpm infra:up

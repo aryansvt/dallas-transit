@@ -82,6 +82,7 @@ export const ROUTE_LOOKUP_SQL = `SELECT ${routeColumns} FROM static_gtfs.routes 
 export function postgresRepository(
   config: ApiConfig,
   database = new ApiDatabase(config),
+  now: () => Date = () => new Date(),
 ): TransitRepository {
   const publication = async (
     db: Pick<import('pg').Client, 'query'>,
@@ -134,12 +135,13 @@ export function postgresRepository(
         to_regclass('public.transit_schema_migrations') IS NOT NULL
         AND to_regclass('static_gtfs.feed_activation') IS NOT NULL
         AND to_regclass('static_gtfs.stop_times') IS NOT NULL
+        AND to_regclass('static_gtfs.stops_search_name') IS NOT NULL
         AND to_regprocedure('static_gtfs.service_is_active(uuid,text,date)') IS NOT NULL
         AND EXISTS (SELECT 1 FROM pg_extension WHERE extname='postgis') AS valid`);
         if (!schema.rows[0]?.valid)
           return { database: true, schema: false, schedule: false };
         const ledger = await db.query<{ valid: boolean }>(
-          `SELECT EXISTS (SELECT 1 FROM public.transit_schema_migrations WHERE name='001_static_gtfs.sql') AS valid`,
+          `SELECT count(*) = 2 AS valid FROM public.transit_schema_migrations WHERE name IN ('001_static_gtfs.sql', '002_stop_search.sql')`,
         );
         if (!ledger.rows[0]?.valid)
           return { database: true, schema: false, schedule: false };
@@ -147,8 +149,16 @@ export function postgresRepository(
         await db.query(`SELECT s.stop_id, s.stop_lat, s.geom, r.route_id, t.trip_id, a.agency_timezone, st.arrival_time
         FROM static_gtfs.stops s, static_gtfs.routes r, static_gtfs.trips t, static_gtfs.agencies a, static_gtfs.stop_times st LIMIT 0`);
         const active = await db.query<{ valid: boolean }>(
-          'SELECT EXISTS (SELECT 1 FROM static_gtfs.feed_activation WHERE source_key=$1) AS valid',
-          [config.sourceKey],
+          'SELECT EXISTS (SELECT 1 FROM static_gtfs.feed_activation WHERE source_key=$1 AND service_date=$2::date) AS valid',
+          [
+            config.sourceKey,
+            new Intl.DateTimeFormat('en-CA', {
+              timeZone: 'America/Chicago',
+              year: 'numeric',
+              month: '2-digit',
+              day: '2-digit',
+            }).format(now()),
+          ],
         );
         return {
           database: true,

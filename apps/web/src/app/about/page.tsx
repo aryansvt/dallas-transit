@@ -50,6 +50,21 @@ export default function AboutPage() {
             Dallas public-transit use.
           </p>
         </section>
+        <section aria-labelledby="data-title">
+          <h2 id="data-title">Data and privacy</h2>
+          <p>
+            Transit schedules: DART GTFS Schedule. Place search and basemap:
+            Mapbox, with OpenStreetMap map attribution. Walking directions:
+            Geoapify. Transit routing: LineFinder’s own RAPTOR engine.
+          </p>
+          <p>
+            <Link href="/privacy" prefetch={false}>
+              Privacy and installation
+            </Link>
+            . Check <a href="https://www.dart.org/">DART</a> for official
+            schedules and service notices.
+          </p>
+        </section>
         <section aria-labelledby="contact-title">
           <h2 id="contact-title">Contact links</h2>
           <ul className="about-links">

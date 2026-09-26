@@ -81,7 +81,11 @@ afterAll(async () => {
 
 describe('API with actual PostGIS and pooled clients', () => {
   it('reports missing schema, then migrations without activation, then usable schedule capability', async () => {
-    const repository = postgresRepository(config);
+    const repository = postgresRepository(
+      config,
+      undefined,
+      () => new Date('2026-09-17T12:00:00Z'),
+    );
     const app = buildApp({}, { config, repository });
     try {
       const missing = await app.inject('/ready');
@@ -95,6 +99,12 @@ describe('API with actual PostGIS and pooled clients', () => {
       const empty = await app.inject('/ready');
       expect(empty.statusCode).toBe(503);
       expect(empty.json().schema).toBe(true);
+      await db.query(
+        "DELETE FROM public.transit_schema_migrations WHERE name='002_stop_search.sql'",
+      );
+      expect((await app.inject('/ready')).json().schema).toBe(false);
+      await db.query('DROP INDEX static_gtfs.stops_search_name');
+      await migrate(db);
       const files = await fixtureFiles();
       files['trips.txt'] += 'bus,week,api-direct,Airport,0,,loop\n';
       files['stop_times.txt'] +=
@@ -129,6 +139,20 @@ describe('API with actual PostGIS and pooled clients', () => {
         journeys: false,
         walkingConfigured: false,
       });
+      const expired = postgresRepository(
+        config,
+        undefined,
+        () => new Date('2026-09-22T12:00:00Z'),
+      );
+      try {
+        expect(await expired.readiness(signal)).toMatchObject({
+          database: true,
+          schema: true,
+          schedule: false,
+        });
+      } finally {
+        await expired.close();
+      }
     } finally {
       await app.close();
     }

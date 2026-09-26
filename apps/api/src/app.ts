@@ -26,6 +26,7 @@ import {
   stopSchema,
 } from './contracts.js';
 import { ApiError } from './errors.js';
+import { authorized, requestBudget } from './admission.js';
 import { ApiDatabase } from './database.js';
 import { postgresRepository, type TransitRepository } from './repository.js';
 import { JourneyService, type JourneyObservation } from './service.js';
@@ -66,6 +67,7 @@ export function buildApp(
   const config = dependencies.config ?? readServerConfig();
   const app = Fastify({
     ...options,
+    trustProxy: false,
     bodyLimit: 4096,
     requestTimeout: 10000,
     logController: new LogController({ disableRequestLogging: true }),
@@ -110,12 +112,42 @@ export function buildApp(
   const journeys = new Capacity(config.journeyConcurrency);
   const reads = new Capacity(16);
   const scopes = new WeakMap<FastifyRequest, RequestScope>();
+  const admit = requestBudget();
 
   app.addHook('onRequest', async (request, reply) => {
     reply
       .header('cache-control', 'no-store')
-      .header('x-content-type-options', 'nosniff');
+      .header('x-content-type-options', 'nosniff')
+      .header(
+        'content-security-policy',
+        "default-src 'none'; frame-ancestors 'none'",
+      )
+      .header('x-frame-options', 'DENY')
+      .header('referrer-policy', 'no-referrer');
     if (request.routeOptions.url === '/health') return;
+    if (request.routeOptions.url !== '/ready' && config.proxyKey) {
+      if (!authorized(request.headers['x-linefinder-key'], config.proxyKey))
+        return reply.code(403).send({
+          error: {
+            code: 'SERVICE_UNAVAILABLE',
+            message: 'Service unavailable.',
+            retryable: false,
+          },
+          requestId: request.id,
+        });
+      if (!admit(request.method === 'POST' ? 4 : 1))
+        return reply
+          .header('retry-after', '2')
+          .code(429)
+          .send({
+            error: {
+              code: 'SERVER_BUSY',
+              message: 'Please try again shortly.',
+              retryable: true,
+            },
+            requestId: request.id,
+          });
+    }
     const controller = new AbortController();
     const signal = AbortSignal.any([
       controller.signal,

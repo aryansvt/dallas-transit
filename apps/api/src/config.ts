@@ -1,5 +1,8 @@
 import { geographicPolicy } from '@dallas-transit/router';
-import { valhallaWalkingProvider } from '@dallas-transit/transit-ingest/runtime';
+import {
+  databaseConnection,
+  valhallaWalkingProvider,
+} from '@dallas-transit/transit-ingest/runtime';
 import { geoapifyWalkingProvider } from './geoapify-walking.js';
 
 // Server-owned; request overrides cannot raise these budgets.
@@ -38,9 +41,12 @@ export function readServerConfig(env: NodeJS.ProcessEnv = process.env) {
       );
     return value;
   };
-  const host = env.HOST ?? '127.0.0.1';
+  const production = env.NODE_ENV === 'production';
+  const host = env.HOST ?? (production ? '0.0.0.0' : '127.0.0.1');
   if (!host.trim())
     throw new ServerConfigurationError('HOST must not be empty');
+  if (production && host !== '0.0.0.0')
+    throw new ServerConfigurationError('HOST must be 0.0.0.0 in production');
   if (env.NODE_ENV === 'production' && !env.DATABASE_URL)
     throw new ServerConfigurationError(
       'DATABASE_URL is required in production',
@@ -49,17 +55,10 @@ export function readServerConfig(env: NodeJS.ProcessEnv = process.env) {
     env.DATABASE_URL ??
     'postgresql://dallas_dev:local_only_password@127.0.0.1:5432/dallas_transit';
   try {
-    const url = new URL(databaseUrl);
-    if (
-      !['postgres:', 'postgresql:'].includes(url.protocol) ||
-      !url.hostname ||
-      url.pathname.length < 2 ||
-      url.hash
-    )
-      throw new Error();
+    databaseConnection(databaseUrl);
   } catch {
     throw new ServerConfigurationError(
-      'DATABASE_URL must identify a PostgreSQL database',
+      'DATABASE_URL must identify a PostgreSQL database with supported TLS settings',
     );
   }
   const walkingUrl = env.WALKING_VALHALLA_URL;
@@ -90,7 +89,16 @@ export function readServerConfig(env: NodeJS.ProcessEnv = process.env) {
       );
     }
   }
+  const proxyKey = env.TRANSIT_PROXY_KEY;
+  if (
+    (production || proxyKey !== undefined) &&
+    !/^[A-Za-z0-9_-]{32,128}$/.test(proxyKey ?? '')
+  )
+    throw new ServerConfigurationError(
+      'TRANSIT_PROXY_KEY must be a 32–128 character random server-only key',
+    );
   return Object.freeze({
+    proxyKey,
     host,
     port: integer('PORT', 3001, 1, 65535),
     databaseUrl,

@@ -8,6 +8,10 @@ The project aims to provide concrete bus/rail journey planning, transfers, live 
 
 ## Status
 
+M9B adds local production-deployment preparation for Vercel and Render. See the
+[deployment runbook](docs/DEPLOYMENT.md) and [M9B review](docs/MILESTONE_9B_REVIEW.md).
+No cloud resources have been created or public release approved by this milestone.
+
 Milestone 6 implements the destination-first mobile/desktop planning flow over the
 stable M5 API. M6B refines journey instructions, introduces the working LineFinder
 brand and About page, and reduces avoidable map loading work. **Milestone 6 is

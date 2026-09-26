@@ -12,6 +12,7 @@ describe('server configuration', () => {
         NODE_ENV: 'production',
         DATABASE_URL: database,
         GEOAPIFY_API_KEY: 'fixture-key',
+        TRANSIT_PROXY_KEY: 'test-key-'.repeat(8),
       }).geoapifyKey,
     ).toBe('fixture-key');
     expect(() =>
