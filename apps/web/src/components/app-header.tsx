@@ -39,9 +39,7 @@ export function AppHeader({
         </Link>
       )}
       <div className="header-secondary">
-        <span className="header-context">
-          <span className="descriptor-city">Dallas/</span>DART Transit Navigator
-        </span>
+        <span className="header-context">Independent Dallas trip planner</span>
         <nav aria-label="Main navigation">
           <Link
             className="header-link"

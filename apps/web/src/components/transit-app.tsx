@@ -400,6 +400,9 @@ function Planner({
               )}
               {!loading && error && (
                 <div className="state-message" role="alert">
+                  <span className="state-icon" aria-hidden="true">
+                    <Icon name="alert" />
+                  </span>
                   <h2>Let&apos;s get you on your way</h2>
                   <p>{error}</p>
                   <button className="secondary-button" onClick={findRoutes}>
@@ -409,6 +412,9 @@ function Planner({
               )}
               {!loading && data?.status === 'no-journey' && (
                 <div className="state-message" role="status">
+                  <span className="state-icon" aria-hidden="true">
+                    <Icon name="pin" />
+                  </span>
                   <h2>No routes found for this trip</h2>
                   <p>
                     {data.reason.includes('access')
@@ -436,7 +442,12 @@ function Planner({
                     </span>
                   </div>
                   <p className="results-caption">
-                    Scheduled · {displayDate(result.serviceDate)} · Dallas time
+                    <span className="schedule-tag">
+                      <Icon name="clock" />
+                      Scheduled
+                    </span>
+                    <span className="sr-only"> · </span>
+                    <span>{displayDate(result.serviceDate)} · Dallas time</span>
                   </p>
                   {result.incomplete && (
                     <p className="notice" role="status">
@@ -465,7 +476,7 @@ function Planner({
                 <Icon name="back" />
                 All route options
               </button>
-              <p className="eyebrow">Your trip to</p>
+              <p className="sr-only">Your trip to</p>
               <div className="destination-heading">
                 <h2 ref={detailRef} tabIndex={-1} id="journey-title">
                   {destination?.name ?? 'Your destination'}
@@ -508,7 +519,12 @@ function Planner({
               </p>
               <RouteSequence journey={journey} references={result.references} />
               <p className="results-caption summary-context">
-                Scheduled · {displayDate(journey.serviceDate)} · Dallas time
+                <span className="schedule-tag">
+                  <Icon name="clock" />
+                  Scheduled
+                </span>
+                <span className="sr-only"> · </span>
+                <span>{displayDate(journey.serviceDate)} · Dallas time</span>
               </p>
               {routeReason && (
                 <p className="notice">Route options updated: {routeReason}</p>
@@ -561,6 +577,7 @@ function Planner({
         )}
         <footer className="app-footer">
           <p>Times are scheduled. Check signs at your stop.</p>
+          <p>LineFinder is independent and not affiliated with DART.</p>
           {!preview && (
             <p>
               Walking routes by <a href="https://www.geoapify.com/">Geoapify</a>

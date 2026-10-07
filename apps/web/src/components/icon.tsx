@@ -18,7 +18,8 @@ export function Icon({
     | 'github'
     | 'linkedin'
     | 'email'
-    | 'chevron';
+    | 'chevron'
+    | 'alert';
   className?: string;
 }) {
   const paths: Record<typeof name, React.ReactNode> = {
@@ -73,6 +74,12 @@ export function Icon({
       <path d="m12 3 2.8 5.8 6.4.9-4.6 4.5 1.1 6.3-5.7-3-5.7 3 1.1-6.3-4.6-4.5 6.4-.9Z" />
     ),
     chevron: <path d="m9 5 7 7-7 7" />,
+    alert: (
+      <>
+        <path d="M12 3 2.5 20h19Z" />
+        <path d="M12 10v4m0 3h.01" />
+      </>
+    ),
     github: (
       <>
         <path
