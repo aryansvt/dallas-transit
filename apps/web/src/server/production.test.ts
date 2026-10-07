@@ -255,7 +255,7 @@ it('provides matching install icons, stable scope and standalone theme', async (
     scope: '/',
     start_url: '/',
     display: 'standalone',
-    theme_color: '#f6f5f0',
+    theme_color: '#0e1c28',
   });
   for (const icon of data.icons!) {
     const file = await readFile(
