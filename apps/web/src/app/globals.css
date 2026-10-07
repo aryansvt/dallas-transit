@@ -315,7 +315,7 @@ time {
   background: var(--surface);
 }
 .field-track span:first-child {
-  border-color: var(--accent-deep);
+  border-color: var(--accent);
   background: var(--accent);
 }
 .field-track span:last-child {
@@ -1038,7 +1038,6 @@ time {
 }
 .legend-origin {
   background: var(--accent);
-  border: 2px solid var(--accent-deep);
 }
 .legend-stop {
   border: 2px solid var(--ink);
