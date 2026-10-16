@@ -42,12 +42,14 @@ export function departureInsight(
   const latest = (deadline: number) => {
     const arrivalTime = Math.floor(deadline);
     if (arrivalTime < 0) return undefined;
+    // every journey that leaves at the latest time starts from its access
+    // stop's latest instant, so one window departure per access finds it
     const result = composeGeographicJourneys(
       schedule,
       { ...place, arrivalTime },
       access,
       egress,
-      overrides,
+      { ...overrides, maxWindowDepartures: 1 },
       undefined,
       checkpoint,
     );
