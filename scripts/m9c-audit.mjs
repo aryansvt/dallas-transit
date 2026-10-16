@@ -259,6 +259,88 @@ try {
         );
       }
     }
+    // arrive-by 15 min after the depart-at arrival (ADR 0006); the latest
+    // leave must be exact: depart-at from it is on time, one second later is not
+    const syntheticWalks = {
+      id: 'synthetic-performance-only',
+      async route(r) {
+        return {
+          status: 'ok',
+          route: { ...r, durationSeconds: 300, distanceMeters: 400 },
+        };
+      },
+    };
+    const departAt = await planGeographicJourney(
+      schedule,
+      request,
+      {
+        candidates: postgisCandidateSource(db, 'dart'),
+        walkingProvider: syntheticWalks,
+      },
+      API_POLICY,
+    );
+    assert.equal(departAt.status, 'ok');
+    const arriveBy = {
+      origin: request.origin,
+      destination: request.destination,
+      serviceDate: request.serviceDate,
+      arrivalTime:
+        Math.ceil(Math.min(...departAt.journeys.map((j) => j.arrivalTime))) +
+        900,
+    };
+    for (let sample = 0; sample < 3; sample++) {
+      const result = await planGeographicJourney(
+        schedule,
+        arriveBy,
+        {
+          candidates: postgisCandidateSource(db, 'dart'),
+          walkingProvider: syntheticWalks,
+        },
+        API_POLICY,
+      );
+      assert.equal(result.status, 'ok');
+      assert(result.metrics.windowDepartures <= 24);
+      assert(
+        result.journeys.every((j) => j.arrivalTime <= arriveBy.arrivalTime),
+      );
+      // same six-and-six candidates the all-success synthetic provider selects
+      const walk = (phase) => (s) => ({
+        publicationId: s.publicationId,
+        stopId: s.stopId,
+        coordinate: s.coordinate,
+        walk: {
+          origin: phase === 'access' ? request.origin : s.coordinate,
+          destination: phase === 'access' ? s.coordinate : request.destination,
+          durationSeconds: 300,
+          distanceMeters: 400,
+        },
+      });
+      const earliestArrival = (departureTime) => {
+        const r = composeGeographicJourneys(
+          schedule,
+          { ...request, departureTime },
+          result.candidates.access.slice(0, 6).map(walk('access')),
+          result.candidates.egress.slice(0, 6).map(walk('egress')),
+          API_POLICY,
+        );
+        return r.status === 'ok'
+          ? Math.min(...r.journeys.map((j) => j.arrivalTime))
+          : Infinity;
+      };
+      const leave = result.journeys[0].requestedDepartureTime;
+      assert(earliestArrival(leave) <= arriveBy.arrivalTime);
+      assert(earliestArrival(leave + 1) > arriveBy.arrivalTime);
+      console.log(
+        'PERFORMANCE ONLY: arrive-by, synthetic walking',
+        JSON.stringify({
+          sample,
+          arrivalTime: arriveBy.arrivalTime,
+          leave,
+          compositionMs: result.metrics.compositionMs,
+          windowDepartures: result.metrics.windowDepartures,
+        }),
+      );
+    }
   }
   if (args.has('--validate-walks')) {
     const { parseEnv } = await import('node:util');

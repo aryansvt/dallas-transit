@@ -15,7 +15,7 @@ export const API_POLICY = geographicPolicy({
   providerTimeoutMs: 3000,
   maxTransitSearches: 36,
   maxJourneys: 3,
-  arriveByWindowSeconds: 7200,
+  arriveByWindowSeconds: 3600,
   maxWindowDepartures: 4,
 });
 export const MAX_TRANSFERS = 3;

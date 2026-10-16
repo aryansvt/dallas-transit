@@ -55,7 +55,7 @@ export interface GeographicPolicy {
   readonly providerTimeoutMs: number;
   readonly maxTransitSearches: number;
   readonly maxJourneys: number;
-  /** Arrive-by searches departures at most this long before the deadline. */
+  /** Arrive-by alternatives leave at most this long before the latest option. */
   readonly arriveByWindowSeconds?: number;
   /** Arrive-by departure instants scanned per access stop. */
   readonly maxWindowDepartures?: number;

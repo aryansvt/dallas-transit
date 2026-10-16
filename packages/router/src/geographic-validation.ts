@@ -22,7 +22,7 @@ export const DEFAULT_GEOGRAPHIC_POLICY: GeographicPolicy = Object.freeze({
   providerTimeoutMs: 5000,
   maxTransitSearches: 36,
   maxJourneys: 3,
-  arriveByWindowSeconds: 7200,
+  arriveByWindowSeconds: 3600,
   maxWindowDepartures: 4,
 });
 
@@ -75,19 +75,19 @@ export function isArriveBy(
   return (request as Partial<ArriveByRequest>).arrivalTime !== undefined;
 }
 
-/** Earliest time worth searching, and the effective arrival deadline. */
-export function departureWindow(
-  request: GeographicRequest,
-  policy: Pick<GeographicPolicy, 'arriveByWindowSeconds'>,
-): { readonly earliest: number; readonly deadline: number } {
-  if (!isArriveBy(request))
-    return { earliest: request.departureTime, deadline: Infinity };
-  const deadline = request.arrivalTime - (request.arrivalBufferSeconds ?? 0);
-  // one service date: the window never reaches before 00:00
-  const window =
-    policy.arriveByWindowSeconds ??
-    DEFAULT_GEOGRAPHIC_POLICY.arriveByWindowSeconds!;
-  return { earliest: Math.max(0, deadline - window), deadline };
+/** Earliest time worth searching, and the effective arrival deadline. Arrive-by
+ * searches the whole service day: the latest option may leave hours early when
+ * service is sparse, and a later deadline must never lose it. */
+export function departureWindow(request: GeographicRequest): {
+  readonly earliest: number;
+  readonly deadline: number;
+} {
+  return isArriveBy(request)
+    ? {
+        earliest: 0,
+        deadline: request.arrivalTime - (request.arrivalBufferSeconds ?? 0),
+      }
+    : { earliest: request.departureTime, deadline: Infinity };
 }
 
 export function validateGeographicRequest(request: GeographicRequest): void {

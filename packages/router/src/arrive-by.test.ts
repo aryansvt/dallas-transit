@@ -180,13 +180,30 @@ describe('arrive-by geographic composition', () => {
     expect(plan([trips[0]!], by(1000))).toMatchObject({ status: 'no-journey' });
   });
 
-  it('searches only the configured window before the deadline', () => {
-    // leaving 08:10 for a 10:12 deadline is outside the default two hours
-    const trips = [trip('long', ['A', 'D'], [29700, 35000])];
-    expect(plan(trips, by(36720))).toMatchObject({ status: 'no-journey' });
+  it('finds the latest departure however early it arrives, so a later deadline never loses it', () => {
+    // a service gap: the only trip arrives 4 h before the later deadline
+    const trips = [trip('only', ['A', 'D'], [29700, 35000])];
+    const expected = [{ leave: 29400, arrive: 35120, transfers: 0 }];
+    expect(summary(plan(trips, by(36720)))).toEqual(expected);
+    expect(summary(plan(trips, by(50000)))).toEqual(expected);
+  });
+
+  it('keeps alternatives only within the window before the latest departure', () => {
+    // the direct ride leaves 5000 s before the latest connection
+    const trips = [
+      trip('direct', ['A', 'D'], [25000, 26000]),
+      trip('feeder', ['A', 'B'], [30000, 30300]),
+      trip('connection', ['B', 'D'], [30400, 31100]),
+    ];
+    expect(summary(plan(trips, by(31300)))).toEqual([
+      { leave: 29700, arrive: 31220, transfers: 1 },
+    ]);
     expect(
-      summary(plan(trips, by(36720), { arriveByWindowSeconds: 10800 })),
-    ).toEqual([{ leave: 29400, arrive: 35120, transfers: 0 }]);
+      summary(plan(trips, by(31300), { arriveByWindowSeconds: 7200 })),
+    ).toEqual([
+      { leave: 29700, arrive: 31220, transfers: 1 },
+      { leave: 24700, arrive: 26120, transfers: 0 },
+    ]);
   });
 
   it('does not let an access stop that is also an egress stop hide journeys', () => {

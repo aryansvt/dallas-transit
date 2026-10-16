@@ -98,7 +98,7 @@ export function composeGeographicJourneys(
     return none('service-date-not-loaded');
   if (!access.length) return none('no-reachable-access-stops');
   if (!egress.length) return none('no-reachable-egress-stops');
-  const { earliest, deadline } = departureWindow(request, policy);
+  const { earliest, deadline } = departureWindow(request);
   // the reverse seed doubles as the forward filter: one predicate for both
   const egressDeadline = new Map(
     egress.map((e) => [e.stopId, deadline - e.walk.durationSeconds]),
@@ -118,14 +118,37 @@ export function composeGeographicJourneys(
       earliestDeparture: earliest,
       ...transfers,
     });
+  // per access: latest departure for each ride count, never before 00:00
+  const latest = new Map<string, number[]>();
   // an effective deadline before 00:00 belongs to the previous service day
-  const shared =
-    arriveBy && deadline >= 0
-      ? bounds(
-          access.map((a) => a.stopId),
-          [...egress],
-        )
-      : undefined;
+  if (arriveBy && deadline >= 0) {
+    const shared = bounds(
+      access.map((a) => a.stopId),
+      [...egress],
+    );
+    for (const a of access) {
+      const targets = egress.filter((e) => e.stopId !== a.stopId);
+      if (!targets.length) continue;
+      // the forward search never routes a stop to itself, so neither may this
+      const values = (
+        targets.length === egress.length ? shared : bounds([a.stopId], targets)
+      ).get(a.stopId)!;
+      latest.set(
+        a.stopId,
+        values.filter(
+          (t): t is number =>
+            t !== null && t - a.walk.durationSeconds >= earliest,
+        ),
+      );
+    }
+  }
+  // alternatives leave at most the window before the latest option overall
+  const cutoff =
+    Math.max(
+      ...access.flatMap((a) =>
+        (latest.get(a.stopId) ?? []).map((t) => t - a.walk.durationSeconds),
+      ),
+    ) - policy.arriveByWindowSeconds!;
   let transitSearches = 0;
   const composed: GeographicJourney[] = [];
   let completedAccessSearches = 0;
@@ -145,17 +168,12 @@ export function composeGeographicJourneys(
         },
         targets.map((e) => e.stopId),
       );
-    else if (shared && targets.length) {
-      // the forward search never routes a stop to itself, so neither may this
-      const latest = (
-        targets.length === egress.length ? shared : bounds([a.stopId], targets)
-      ).get(a.stopId)!;
+    else if (latest.has(a.stopId)) {
       const departureTimes = [
         ...new Set(
-          latest.filter(
-            (t): t is number =>
-              t !== null && t - a.walk.durationSeconds >= earliest,
-          ),
+          latest
+            .get(a.stopId)!
+            .filter((t) => t - a.walk.durationSeconds >= cutoff),
         ),
       ]
         .sort((x, y) => y - x)

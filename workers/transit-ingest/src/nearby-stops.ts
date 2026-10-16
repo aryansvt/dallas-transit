@@ -222,7 +222,7 @@ export function postgisCandidateSource(
               policy.shortlistLimit ?? 32,
             ),
             request.serviceDate,
-            departureWindow(request, policy).earliest,
+            departureWindow(request).earliest,
             access,
             policy.radiusMeters,
           ]);
