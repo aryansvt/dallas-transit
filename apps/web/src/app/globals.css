@@ -1055,6 +1055,22 @@ time {
   width: 100%;
   text-align: left;
 }
+/* leave after class, and when that gets you there */
+.after-class {
+  display: grid;
+  gap: 2px;
+}
+.after-class-arrival {
+  font-size: var(--text-secondary);
+  font-weight: 600;
+  color: var(--muted);
+}
+/* "2 hr 17 min late" moves to the next line whole when it can */
+.after-class-arrival strong {
+  display: inline-block;
+  color: var(--ink);
+  font-weight: 700;
+}
 
 /* results */
 .results-section {

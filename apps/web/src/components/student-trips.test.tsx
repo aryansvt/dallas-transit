@@ -132,7 +132,7 @@ it('imports a schedule on the device and plans the next class by its start', asy
       arrivalBufferMinutes: 10,
     },
   ]);
-  expect(button('Arrive by').textContent).toContain('10 min early');
+  expect(button('Arrive by').textContent).toContain('10\u00a0min\u00a0early');
   expect(
     container.querySelector('.place-control.destination-control')?.textContent,
   ).toContain('ECSW 1.315');
@@ -220,7 +220,7 @@ it('plans an arrive-by trip chosen in the time sheet', async () => {
   await set('input[type=time]', '17:30');
   await set('select', '15');
   await click(button('Set time'));
-  expect(button('Arrive by').textContent).toContain('15 min early');
+  expect(button('Arrive by').textContent).toContain('15\u00a0min\u00a0early');
   await click(button('Find routes'));
   await tick();
   expect(requests[0]).toEqual({
@@ -263,6 +263,8 @@ it('words the no-rush insight plainly', async () => {
 
 it('leads arrive-by results with when to leave, latest option first', async () => {
   await render('arrive-by');
+  // the planner shows the choice these results answer
+  expect(button('Arrive by').textContent).toContain('9:00 AM');
   const board = container.querySelector('.leave-board')!;
   expect(board.querySelector('h2')?.textContent).toBe('Leave by 8:14 AM');
   expect(board.querySelector('.leave-when')?.textContent).toBe('in 26 min');
@@ -318,13 +320,88 @@ it('warns when the leave time falls before the current class ends', async () => 
     'Leave by 10:44 AM',
   );
   await click(button('All route options'));
-  await click(button('Leave at 11:15 AM instead'));
+  // a real lookup says when leaving after class gets there, and that it is late
+  expect(button('Leave after class').textContent).toBe(
+    'Leave after classFinding your arrival time',
+  );
   await tick();
-  expect(requests[0]).toMatchObject({
+  expect(button('Leave after class').textContent).toBe(
+    'Leave after classArrive 11:47 AM, 17 min late',
+  );
+  const afterClass = {
     serviceDate: '2026-09-17',
     departureTime: 40500,
+  };
+  expect(requests.at(-1)).toEqual({
+    origin,
+    destination: expect.any(Object),
+    ...afterClass,
   });
-  expect(requests[0]).not.toHaveProperty('earliestDepartureTime');
+  await click(button('Leave after class'));
+  await tick();
+  expect(requests.at(-1)).toMatchObject(afterClass);
+  expect(requests.at(-1)).not.toHaveProperty('earliestDepartureTime');
+});
+
+it('gives a late after-class arrival in hours, and its day past midnight', async () => {
+  await render('class-conflict-worst');
+  await tick();
+  expect(button('Leave after class').textContent).toBe(
+    'Leave after classArrive 10:17 PM, 2 hr 17 min late',
+  );
+  await act(async () => root.unmount());
+  root = createRoot(container);
+  const worst = previewSetup('class-conflict-worst');
+  await act(async () =>
+    root.render(
+      <TransitApp
+        preview={{
+          ...worst,
+          // the lab runs 9:00 to 11:45 PM, so after class is past midnight
+          schedule: [{ ...worst.schedule![0]!, startTime: '21:00' }],
+          departure: {
+            mode: 'by',
+            date: '2026-09-17',
+            time: '22:00',
+            bufferMinutes: 0,
+          },
+        }}
+        client={client}
+      />,
+    ),
+  );
+  await click(button('Find routes'));
+  await tick();
+  await tick();
+  expect(button('Leave after class').textContent).toBe(
+    'Leave after classArrive 12:17 AM next day, 2 hr 17 min late',
+  );
+});
+
+it('gives the after-class arrival without "late" when it still makes it', async () => {
+  await act(async () =>
+    root.render(
+      <TransitApp
+        preview={{
+          ...previewSetup('class-conflict'),
+          // leave by 11:04 for 11:50; after class arrives 11:47
+          departure: {
+            mode: 'by',
+            date: '2026-09-17',
+            time: '11:50',
+            bufferMinutes: 10,
+          },
+        }}
+        client={client}
+      />,
+    ),
+  );
+  await click(button('Find routes'));
+  await tick();
+  await tick();
+  expect(button('Leave after class').textContent).toBe(
+    'Leave after classArrive 11:47 AM',
+  );
 });
 
 it('says a passed leave time instead of a class warning', async () => {

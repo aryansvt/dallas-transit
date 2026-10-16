@@ -1,8 +1,10 @@
 import type { Ref } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import type {
   GeographicJourney,
   JourneyResponse,
 } from '@dallas-transit/shared';
+import type { TransitClient } from '../lib/api';
 import {
   classAtLeave,
   classWarning,
@@ -22,6 +24,11 @@ import { Icon } from './icon';
 
 type OkResponse = Extract<JourneyResponse, { status: 'ok' }>;
 type ArriveByResponse = Extract<OkResponse, { requestedArrivalTime: number }>;
+/** "10:17 PM", or "12:20 AM next day" past the service date. */
+function clockOn(serviceDate: string, seconds: number) {
+  const t = serviceTime(serviceDate, seconds);
+  return t.dayLabel ? `${t.clock} ${t.dayLabel}` : t.clock;
+}
 /** A minute late or more; "now" still counts as on time. */
 const passed = (leave: Date, now: Date) =>
   leave.getTime() - now.getTime() <= -60000;
@@ -32,6 +39,7 @@ function LeaveBoard({
   journey,
   now,
   classes,
+  client,
   onLeaveNow,
   onPlanAt,
 }: {
@@ -39,6 +47,7 @@ function LeaveBoard({
   journey: GeographicJourney;
   now: Date;
   classes: readonly ClassSeries[];
+  client: TransitClient;
   onLeaveNow(): void;
   onPlanAt(seconds: number): void;
 }) {
@@ -51,6 +60,58 @@ function LeaveBoard({
   const during =
     !late &&
     classAtLeave(classes, journey.serviceDate, journey.requestedDepartureTime);
+  const afterClass = during
+    ? earliestLeave(
+        classes,
+        journey.serviceDate,
+        journey.requestedDepartureTime,
+      )
+    : undefined;
+  // the real scheduled arrival when leaving after class; a guess from this
+  // trip's length can be a whole headway off
+  const lookup = useQuery({
+    queryKey: [
+      'after-class',
+      result.serviceDate,
+      afterClass,
+      result.origin,
+      result.destination,
+    ],
+    queryFn: async ({ signal }) => {
+      const next = await client.journeys(
+        {
+          origin: result.origin,
+          destination: result.destination,
+          serviceDate: result.serviceDate,
+          departureTime: afterClass!,
+        },
+        signal,
+      );
+      return next.status === 'ok'
+        ? (next.journeys[0]?.arrivalTime ?? null)
+        : null;
+    },
+    enabled: afterClass !== undefined,
+  });
+  const arrival = lookup.data;
+  // nothing to say when the lookup failed; the button still plans
+  const arrivalLine = lookup.isPending
+    ? 'Finding your arrival time'
+    : arrival === null
+      ? 'No later trip found'
+      : arrival !== undefined && (
+          <>
+            Arrive {clockOn(result.serviceDate, arrival)}
+            {arrival > result.requestedArrivalTime && (
+              <>
+                ,{' '}
+                <strong>
+                  {duration(arrival - result.requestedArrivalTime)} late
+                </strong>
+              </>
+            )}
+          </>
+        );
   const early = result.requestedArrivalTime - journey.arrivalTime;
   const target = serviceTime(
     result.serviceDate,
@@ -112,17 +173,18 @@ function LeaveBoard({
             <p>{classWarning(during)}</p>
             <button
               className="secondary-button"
-              onClick={() =>
-                onPlanAt(
-                  earliestLeave(
-                    classes,
-                    journey.serviceDate,
-                    journey.requestedDepartureTime,
-                  )!,
-                )
-              }
+              onClick={() => onPlanAt(afterClass!)}
             >
-              Leave at {clockTime(during.end)} instead
+              <span className="after-class">
+                Leave after class
+                {arrivalLine && (
+                  <span className="after-class-arrival">
+                    <Tick value={lookup.isPending ? 'pending' : `${arrival}`}>
+                      {arrivalLine}
+                    </Tick>
+                  </span>
+                )}
+              </span>
               <Icon name="arrow" />
             </button>
           </div>
@@ -170,6 +232,7 @@ export function RouteResults({
   selected,
   classes,
   now,
+  client,
   onCancel,
   onRetry,
   onChangeDeparture,
@@ -185,6 +248,8 @@ export function RouteResults({
   /** The device class schedule, for leave times inside a class. */
   classes: readonly ClassSeries[];
   now: Date;
+  /** Looks up the arrival for leaving after a class. */
+  client: TransitClient;
   onCancel(): void;
   onRetry(): void;
   onChangeDeparture(): void;
@@ -271,6 +336,7 @@ export function RouteResults({
                 journey={latest}
                 now={now}
                 classes={classes}
+                client={client}
                 onLeaveNow={onLeaveNow}
                 onPlanAt={onInsight}
               />

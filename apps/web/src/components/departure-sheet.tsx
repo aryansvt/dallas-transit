@@ -25,7 +25,7 @@ export const departureLabel = (d: Departure) =>
     ? 'Leave now'
     : d.mode === 'at'
       ? `Depart ${displayDate(d.date)}, ${clock(d.date, d.time)}`
-      : `Arrive by ${displayDate(d.date)}, ${clock(d.date, d.time)}${d.bufferMinutes ? ` · ${d.bufferMinutes} min early` : ''}`;
+      : `Arrive by ${displayDate(d.date)}, ${clock(d.date, d.time)}${d.bufferMinutes ? ` · ${d.bufferMinutes}\u00a0min\u00a0early` : ''}`;
 export function DepartureSheet({
   value,
   onSelect,

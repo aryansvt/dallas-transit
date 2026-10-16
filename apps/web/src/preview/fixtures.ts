@@ -288,6 +288,7 @@ export const scenarios = {
   'arrive-worst': '25 · Arrive-by, worst-case data',
   'arrive-ticking': '26 · Arrive-by, clock running',
   'map-unavailable': '27 · Trip detail, no street map',
+  'class-conflict-worst': '28 · Leave during class, worst-case data',
 } as const;
 export type Scenario = keyof typeof scenarios;
 // a fall 2026 timetable; one building has no official entrance yet
@@ -337,6 +338,34 @@ const backToBack: ClassSeries = {
 type WalkingLeg = Extract<GeographicJourney['legs'][number], { kind: 'walk' }>;
 const [utd, , , northside] = STUDENT_PLACES.map(copyPlace);
 const previewPresets: Presets = { version: 1, home: northside!, school: utd! };
+const movedBy =
+  (shift: number) =>
+  <T extends { departureTime: number; arrivalTime: number }>(l: T): T => ({
+    ...l,
+    departureTime: l.departureTime + shift,
+    arrivalTime: l.arrivalTime + shift,
+  });
+/** The 8:00 AM depart-at fixture moved to any departure and date. */
+function departAtResponse(
+  departureTime: number,
+  serviceDate: string,
+): OkResponse {
+  const response = previewResponse();
+  const shift = departureTime - 28800;
+  const moved = movedBy(shift);
+  return {
+    ...response,
+    serviceDate,
+    requestedDepartureTime: departureTime,
+    journeys: response.journeys.map((j) => ({
+      ...j,
+      serviceDate,
+      requestedDepartureTime: departureTime,
+      arrivalTime: j.arrivalTime + shift,
+      legs: j.legs.map(moved),
+    })),
+  };
+}
 /** Arrive-by results: each option leaves as late as it can, latest first as
  * the API orders them. The 9:00 AM fixture moves to any deadline and date. */
 function arriveByResponse(
@@ -346,13 +375,7 @@ function arriveByResponse(
 ): OkResponse {
   const response = previewResponse();
   const shift = arrivalTime - 32400;
-  const moved = <T extends { departureTime: number; arrivalTime: number }>(
-    l: T,
-  ): T => ({
-    ...l,
-    departureTime: l.departureTime + shift,
-    arrivalTime: l.arrivalTime + shift,
-  });
+  const moved = movedBy(shift);
   return {
     publicationId: response.publicationId,
     serviceDate,
@@ -475,21 +498,27 @@ export function previewSetup(scenario: Scenario): PreviewSetup {
         },
       },
     };
+  // the planner shows the 9:00 AM arrive-by choice the fixture answers
+  const arriving: PreviewSetup = {
+    ...setup,
+    departure: {
+      mode: 'by',
+      date: '2026-09-18',
+      time: '09:00',
+      bufferMinutes: 10,
+    },
+    data: arriveByResponse(),
+  };
   // Friday 7:48 AM: the latest option leaves at 8:14
   if (scenario === 'arrive-by')
-    return { ...setup, now: '2026-09-18T12:48:00Z', data: arriveByResponse() };
+    return { ...arriving, now: '2026-09-18T12:48:00Z' };
   // a minute passes every 1.5 s so the countdown visibly rolls
   if (scenario === 'arrive-ticking')
-    return {
-      ...setup,
-      now: '2026-09-18T12:48:00Z',
-      fastClock: true,
-      data: arriveByResponse(),
-    };
+    return { ...arriving, now: '2026-09-18T12:48:00Z', fastClock: true };
   if (scenario === 'map-unavailable')
     return { ...setup, data: response, detail: 0, noMap: true };
   if (scenario === 'arrive-late')
-    return { ...setup, now: '2026-09-18T13:20:00Z', data: arriveByResponse() };
+    return { ...arriving, now: '2026-09-18T13:20:00Z' };
   // in CS 3345 until 11:15; getting to an 11:30 class means leaving at 10:44
   if (scenario === 'class-conflict') {
     const target = classDestination(backToBack);
@@ -508,6 +537,35 @@ export function previewSetup(scenario: Scenario): PreviewSetup {
       data: arriveByResponse(41400, 10, '2026-09-17'),
     };
   }
+  // a three-hour evening lab under way at the latest leave: after class gets
+  // there hours late
+  if (scenario === 'class-conflict-worst')
+    return {
+      ...student,
+      now: '2026-09-17T23:40:00Z',
+      destination: {
+        ...previewDestination,
+        name: 'Dallas Museum of Art, Center for Creative Connections and Family Experiences',
+      },
+      schedule: [
+        {
+          ...semester,
+          id: 'biol2281',
+          title: 'BIOL 2281.501 Introductory Biology Laboratory',
+          location: 'SCI 2.220',
+          startTime: '19:00',
+          minutes: 165,
+          weekdays: [4],
+        },
+      ],
+      departure: {
+        mode: 'by',
+        date: '2026-09-17',
+        time: '20:00',
+        bufferMinutes: 0,
+      },
+      data: arriveByResponse(72000, 0, '2026-09-17'),
+    };
   if (scenario === 'transfers')
     return { ...setup, data: previewResponse(false, 'transfers') };
   if (scenario === 'transfers-detail')
@@ -647,6 +705,6 @@ export const previewClient: TransitClient = {
           request.arrivalBufferMinutes ?? 0,
           request.serviceDate,
         )
-      : previewResponse();
+      : departAtResponse(request.departureTime, request.serviceDate);
   },
 };
