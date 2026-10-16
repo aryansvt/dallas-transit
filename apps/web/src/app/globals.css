@@ -825,7 +825,7 @@ time {
   background: var(--surface);
   box-shadow: var(--elevation-1);
 }
-.collapse {
+.expander {
   display: grid;
   grid-template-rows: 0fr;
   opacity: 0;
@@ -833,11 +833,11 @@ time {
     grid-template-rows 320ms var(--ease-out),
     opacity 200ms ease;
 }
-.collapse[data-open='true'] {
+.expander[data-open='true'] {
   grid-template-rows: 1fr;
   opacity: 1;
 }
-.collapse > * {
+.expander > * {
   min-height: 0;
   overflow: clip;
   overflow-clip-margin: 16px;
@@ -1261,6 +1261,11 @@ time {
 .detail-summary .journey-bar .walk {
   background: #b4c4d280;
 }
+/* a line with no feed color falls back to ink; keep its edge on ink panels */
+.leave-board .journey-bar .ride,
+.detail-summary .journey-bar .ride {
+  box-shadow: inset 0 0 0 1px #ffffff47;
+}
 @keyframes draw {
   from {
     clip-path: inset(0 100% 0 0);
@@ -1312,6 +1317,10 @@ time {
   font-size: var(--text-body);
   font-weight: 600;
   margin-bottom: 8px;
+}
+/* each fact stays whole; the line breaks at the separators */
+.route-metrics > span:not([aria-hidden]) {
+  white-space: nowrap;
 }
 .boarding-context {
   display: block;
@@ -1717,9 +1726,9 @@ time {
     radial-gradient(120% 90% at 50% 40%, transparent 55%, #0e1c2812),
     radial-gradient(
       ellipse 75% 60% at 0% 105%,
-      transparent 63%,
-      #1965991f 64% 68%,
-      transparent 69%
+      transparent 64%,
+      #19659917 64.5% 66.5%,
+      transparent 67%
     ),
     repeating-linear-gradient(-35deg, #0e1c280d 0 1px, transparent 1px 34px),
     repeating-linear-gradient(55deg, #0e1c280a 0 1px, transparent 1px 34px),

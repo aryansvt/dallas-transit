@@ -15,6 +15,10 @@ colors:
   brass: '#7a4f0c'
   hairline: '#cdd2cb'
   field-stroke: '#7d8791'
+  board-lit: '#1c384d'
+  board-deep: '#09131c'
+  amber-lit: '#fabf4f'
+  amber-deep: '#f2b03a'
 typography:
   display:
     fontFamily: 'Barlow Semi Condensed, Barlow, system-ui, sans-serif'
@@ -112,10 +116,11 @@ It must never look like DART. No DART logo or palette is used for chrome or iden
 
 - Paper canvas with Board Ink panels and one amber voice
 - Barlow and Barlow Semi Condensed, self-hosted, tabular numerals for every time
-- Hairline borders and tonal surfaces; shadows only on floating things
+- A three-level ink-tinted elevation scale; hero panels in a lit ink material
 - Square-cornered line badges colored by the feed, white-on-color or black-on-color by contrast
 - 48px minimum targets, 3px focus rings, safe-area aware
-- Sheets slide up with an ease-out drawer curve; opening a trip rises the summary and staggers the steps (30ms)
+- Route colors lead: a proportional route line on cards and heroes, line-colored rails in the steps
+- Motion with purpose: results stagger in, the tapped card morphs into the trip summary, values roll on change
 - Reduced motion keeps fades and color changes and drops movement
 
 ## Colors
@@ -140,6 +145,8 @@ Cool ink and warm paper with a bright amber that only appears on dark panels or 
 - **Slate Muted** (#475561): secondary text on paper (7:1 and up).
 - **Board Muted** (#b4c4d2): secondary text on ink.
 - **Hairline** (#cdd2cb) and **Field Stroke** (#7d8791): dividers, and dashed walk lines and input borders.
+- **Board Lit** (#1c384d) and **Board Deep** (#09131c): the two ends of the hero material gradient around Board Ink.
+- **Amber Lit** (#fabf4f) and **Amber Deep** (#f2b03a): the primary button's top-lit gradient.
 
 ### Named Rules
 
@@ -158,13 +165,13 @@ Cool ink and warm paper with a bright amber that only appears on dark panels or 
 ### Hierarchy
 
 - **Display** (700, clamp(34px, 9vw, 48px), 1.04): home heading and About title.
-- **Time** (700, 44px list, 64px on the trip panel, tabular): arrival times.
+- **Time** (700, tabular, -0.02em on heroes): 44px in lists, 64px for the next class, `clamp(60px, 19vw, 76px)` on the leave board and trip summary. The meridiem is set at 0.42em so the digits carry the size.
 - **Headline** (700, 30px): destination name on the trip panel.
 - **Title** (700, 22px): section headings.
 - **Body** (400 to 600, 17px, 1.45): default. Secondary text is 15px.
 - **Label** (700, 13px, 0.08em, uppercase): field labels, tags, "Get off".
 
-In `globals.css` every size is a `--text-*` token (label 13, secondary 15, body 17, field 18 for inputs and place names, title 22, headline 30, time 44, time-xl 64, display) and every radius a `--radius-*` token (xs 4, sm 8, md 12, control 14, lg 16, xl 20, sheet 24). Circles use 50%.
+In `globals.css` every size is a `--text-*` token (label 13, secondary 15, body 17, field 18 for inputs and place names, title 22, headline 30, time 44, time-xl 64, time-hero, display) and every radius a `--radius-*` token (xs 4, sm 8, md 12, control 14, lg 16, xl 20, sheet 24). Circles use 50%.
 
 ### Named Rules
 
@@ -178,11 +185,23 @@ Home leads with the heading, the planner card, then saved and recent places as d
 
 ## Elevation & Depth
 
-Flat by default. Surfaces separate by tone (white on paper, ink on paper) and 1px hairlines. Shadows exist only on floating things: map buttons, markers, and sheets (`0 -12px 48px #0e1c2833`). Sheets sit over a `#0e1c28aa` backdrop.
+Three levels, each an ink-tinted contact shadow plus a soft ambient one. Elevated surfaces trade the hairline for `--border-soft` (#0e1c2812). Dividers inside a surface keep the hairline.
+
+| Token                | Value                                                | Used on                                                      |
+| -------------------- | ---------------------------------------------------- | ------------------------------------------------------------ |
+| `--elevation-1`      | `0 1px 2px #0e1c280f, 0 4px 12px -4px #0e1c281f`     | route cards, grouped lists, chips, map panel, state messages |
+| `--elevation-2`      | `0 2px 4px #0e1c280f, 0 10px 24px -6px #0e1c2829`    | planner, hovered cards and chips, selected route card        |
+| `--elevation-3`      | `0 4px 8px #0e1c2814, 0 24px 48px -12px #0e1c2847`   | map buttons and captions, the map-unavailable card, sheets   |
+| `--elevation-hero`   | `inset 0 1px 0 #ffffff1a`, then a 16px/32px ink drop | leave board, trip summary, next class, arrival card          |
+| `--elevation-button` | inset white highlight plus a brass-tinted drop       | the amber primary button                                     |
+
+**Hero material.** `--hero-fill`: a 160deg gradient from #1c384d through Board Ink to #09131c, an LED dot grid (white at 7%, 9px pitch) and a fade that lets the dots fall away toward the bottom. The lit top edge is the inset highlight.
+
+Sheets sit over a `#0e1c28aa` backdrop.
 
 ### Named Rules
 
-**The Flat-By-Default Rule.** Cards and the planner carry no shadow.
+**The Elevation Rule.** Resting cards sit at level 1 and lift to level 2 under a fine pointer; a press pushes them down 1px with a contact-only shadow. Floating chrome is level 3. No colored glows, no glass, nothing outside this scale.
 
 ## Shapes
 
@@ -192,19 +211,22 @@ Rounded but disciplined: 16 to 20px for cards and panels, 12 to 14px for control
 
 ### Buttons
 
-- **Primary:** full-width Signal Amber, Board Ink text, 56px, 14px radius, arrow nudges 4px on hover. Press scales to 0.97.
-- **Secondary:** white, 1.5px ink border, 48px.
+- **Primary:** full-width Signal Amber (a gentle top-lit gradient, `--elevation-button`), Board Ink text, 56px, 14px radius, arrow nudges 4px on hover. Press scales to 0.97 and sinks into an inner shadow.
+- **Secondary:** white, 1.5px ink border, 48px, level 1.
 - **Text and icon:** 48px minimum, underline links, quiet hover fill only on hover-capable devices.
 
 ### Cards / Containers
 
-- **Route card:** white, hairline, 16px radius. Large arrival time left, duration and tag right, line badges, "Board X at Y" with the stop in bold, then a "View journey" footer rule. Cards rise in with a 45ms stagger.
-- **Planner:** white 20px card with a dashed route track (amber origin, ink square destination).
+- **Route card:** white, level 1, 16px radius. Large time left, duration and tag right, the route line, line badges, "Board X at Y" with the stop in bold, then a "View journey" footer rule. Cards rise in with a 50ms stagger, lift 2px on hover and press down on tap. Tapping one morphs it into the trip summary (View Transitions, 420ms drawer curve).
+- **Route line:** each leg as its share of the trip. Rides are 8px bars in the feed's line color, walks a 4px gray thread, 3px gaps. Decorative (`aria-hidden`); badges and steps name every route. On heroes it draws left to right as the panel settles.
+- **Planner:** white 20px card at level 2 with a dashed route track (amber origin, ink square destination).
+- **Grouped lists:** Home, School, saved and recent places sit on one level-1 card; dividers start after the icon tile.
+- **Loading:** three skeleton cards in the route card's shape. Blocks breathe; an amber light travels along each route line.
 - **State message:** white card with an ink icon tile, plain heading, one action.
 
 ### Inputs / Fields
 
-White with 2px ink border, 14px radius, 18px text to avoid iOS zoom. Focus adds a 3px Brass ring.
+White with 2px ink border, 14px radius, 18px text to avoid iOS zoom. Focus adds a 3px Brass ring (amber on ink) that contracts onto the control from 7px to 3px offset. Radios in the time sheet are drawn: the ink dot scales in.
 
 ### Navigation
 
@@ -212,23 +234,31 @@ Board Ink bar: brand mark and wordmark left, underlined About link right, small 
 
 ### Trip Summary Panel (signature)
 
-Board Ink panel with destination, a 64px amber arrival time, duration at right, transfer and walking line, line badges, and a "Scheduled" tag with the service date.
+Hero material panel with destination, the hero amber arrival time, duration at right, the route line, transfer and walking line, line badges, and a "Scheduled" tag with the service date. It settles in on the drawer curve.
 
 ### Itinerary Timeline (signature)
 
-Ink rail for rides, dashed rail for walking, 34px dots. Times sit right in condensed bold. Transfers get an Amber Wash band. Arrival is a Board Ink card with an amber time.
+A ride's rail (4px) and square dot take its line color, with the contrast-checked text color from the feed logic; walking keeps the dashed rail and round dot. Times sit right in condensed bold. Transfers get an Amber Wash band. Arrival is a hero card with an amber time. Steps rise in with a 30ms stagger.
 
 ### Leave-By Board (signature)
 
-Arrive-by results open with a Board Ink panel: "Leave by" over a 64px amber time, a relative pill ("in 26 min", "6 min ago", or the date), then Arrive and Early by facts split by a board-line rule. A passed time is struck through and its pill turns amber. A leave time inside a class, or a passed one, adds an Amber Wash callout with an ink alert tile and one action ("Leave at 11:15 AM instead", "Leave now instead").
+Arrive-by results open with a hero panel that settles in: "Leave by" over the hero amber time (it rolls up when it changes), the route line, a relative pill that rolls each minute ("in 26 min", "6 min ago", or the date), then Arrive and Early by facts split by a board-line rule. A passed time is struck through and its pill turns amber. A leave time inside a class, or a passed one, adds an Amber Wash callout with an ink alert tile and one action ("Leave at 11:15 AM instead", "Leave now instead").
 
 ### Transfer Tags
 
 Comfortable, Tight or Risky, from the router's scheduled shortfall per transfer (0, up to 180 s, above 180 s). Icon plus word, never color alone: check on Quiet Surface, clock on Amber Wash with Brass text, alert on Board Ink. On ink panels Risky takes the amber fill. Cards show the tightest; steps show each with its minutes to connect. No data, no tag.
 
+### Map
+
+When there is no street style, the canvas shows a schematic instead of a blank box: a faint street grid at two angles, a river arc and a soft vignette. Markers, buttons and the caption float at level 3; "Street map unavailable" is a floating card.
+
 ### Sheets
 
-Bottom sheets on phones with a grabber, centered modals from 600px. Enter with an ease-out drawer curve over 280ms.
+Bottom sheets on phones with a grabber, centered modals from 600px. Enter with an ease-out drawer curve over 280ms. Details and the class schedule expand to their natural height (300ms) with a turning chevron.
+
+### Motion
+
+Durations stay under 450ms; entrances use `--ease-out`, panels `--ease-drawer`, travel `--ease-in-out`. Reduced motion keeps opacity and color changes and drops every transform, the route-line draw, the travelling skeleton light and the card morph (it becomes a crossfade).
 
 ## Do's and Don'ts
 
@@ -244,7 +274,7 @@ Bottom sheets on phones with a grabber, centered modals from 600px. Enter with a
 
 - **Don't** use DART's logo, name as brand, or palette.
 - **Don't** put amber text on paper.
-- **Don't** add shadows to static cards, or colored side stripes to cards.
+- **Don't** use shadows outside the elevation scale, colored glows, or colored side stripes on cards.
 - **Don't** convey status by color alone.
 - **Don't** animate frequent or keyboard actions beyond press feedback and one-time entrances.
 - **Don't** use em dashes or marketing-sounding copy.

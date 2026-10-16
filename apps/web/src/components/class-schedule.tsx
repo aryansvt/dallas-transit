@@ -245,10 +245,16 @@ export function ClassSchedule({
             <p className="next-class-room">{placeStatus(next.series, false)}</p>
             {destination && 'place' in destination ? (
               <button className="primary-button" onClick={() => onPlan(next)}>
-                Plan trip to arrive{' '}
-                {clockTime(
-                  new Date(next.start.getTime() - CLASS_BUFFER_MINUTES * 60000),
-                )}
+                <span>
+                  Plan trip to arrive{' '}
+                  <time>
+                    {clockTime(
+                      new Date(
+                        next.start.getTime() - CLASS_BUFFER_MINUTES * 60000,
+                      ),
+                    )}
+                  </time>
+                </span>
                 <Icon name="arrow" />
               </button>
             ) : (
@@ -276,31 +282,34 @@ export function ClassSchedule({
         )}
       </div>
       {/* stays mounted so it can expand and collapse; inert while closed */}
-      <div className="collapse" data-open={open}>
-        <div className="class-list" id={listId} inert={!open}>
-          <ul>
-            {classes.map((c) => (
-              <li key={c.id}>
-                <strong>{c.title}</strong>
-                <span className="secondary">{meets(c)}</span>
-                <span className="secondary">{placeStatus(c)}</span>
-              </li>
-            ))}
-          </ul>
-          <div className="class-actions">
-            <ScheduleFile
-              className="secondary-button"
-              onFile={(f) => void read(f)}
-            >
-              Replace schedule
-            </ScheduleFile>
-            <button className="text-button" onClick={onRemove}>
-              Remove schedule
-            </button>
+      <div className="expander" data-open={open}>
+        <div>
+          <div className="class-list" id={listId} inert={!open}>
+            <ul>
+              {classes.map((c) => (
+                <li key={c.id}>
+                  <strong>{c.title}</strong>
+                  <span className="secondary">{meets(c)}</span>
+                  <span className="secondary">{placeStatus(c)}</span>
+                </li>
+              ))}
+            </ul>
+            <div className="class-actions">
+              <ScheduleFile
+                className="secondary-button"
+                onFile={(f) => void read(f)}
+              >
+                Replace schedule
+              </ScheduleFile>
+              <button className="text-button" onClick={onRemove}>
+                Remove schedule
+              </button>
+            </div>
+            <p className="local-note">
+              Classes are stored only on this device. The file itself is not
+              kept.
+            </p>
           </div>
-          <p className="local-note">
-            Classes are stored only on this device. The file itself is not kept.
-          </p>
         </div>
       </div>
     </section>

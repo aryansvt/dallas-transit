@@ -241,7 +241,6 @@ export function RouteCard({
             <span aria-hidden="true"> · </span>
           </>
         )}
-        {/* each fact stays whole when the line wraps */}
         <span>
           {journey.transferCount === 0
             ? 'No transfers'
