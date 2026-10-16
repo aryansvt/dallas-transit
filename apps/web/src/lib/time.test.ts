@@ -4,6 +4,7 @@ import {
   civilInstant,
   departureAt,
   duration,
+  fromNow,
   leaveNow,
   serviceAnchor,
   serviceTime,
@@ -65,5 +66,17 @@ describe('Dallas civil and service-day time', () => {
   it('formats elapsed duration independently of civil dates', () => {
     expect(duration(61)).toBe('2 min');
     expect(duration(6900)).toBe('1 hr 55 min');
+  });
+  it('says how far off a leave time is, in whole minutes', () => {
+    const now = new Date('2026-09-18T12:48:00Z');
+    const at = (minutes: number) => new Date(now.getTime() + minutes * 60000);
+    expect(fromNow(at(26), now)).toBe('in 26 min');
+    expect(fromNow(at(25.9), now)).toBe('in 25 min');
+    expect(fromNow(at(90), now)).toBe('in 1 hr 30 min');
+    expect(fromNow(at(0.5), now)).toBe('now');
+    expect(fromNow(at(-0.5), now)).toBe('now');
+    expect(fromNow(at(-6.5), now)).toBe('6 min ago');
+    // another Dallas day reads as its date, not a huge countdown
+    expect(fromNow(at(24 * 60), now)).toBe('Sat, Sep 19');
   });
 });

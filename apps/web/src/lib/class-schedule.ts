@@ -6,7 +6,7 @@ import {
   parseIcs,
   type ClassSeries,
 } from './ics';
-import { serviceAnchor, serviceInstant } from './time';
+import { clockTime, serviceAnchor, serviceInstant } from './time';
 import { matchBuilding } from './utd-buildings';
 
 export const SCHEDULE_KEY = 'dallas-transit.schedule.v1';
@@ -138,6 +138,29 @@ export function earliestLeave(
   return current
     ? Math.ceil((current.end.getTime() - serviceAnchor(serviceDate)) / 1000)
     : undefined;
+}
+
+/** The class a rider would still be in when a trip has to leave. */
+export const classAtLeave = (
+  classes: readonly ClassSeries[],
+  serviceDate: string,
+  seconds: number,
+) => ongoingClass(classes, serviceInstant(serviceDate, seconds));
+
+/** "ECSW 1.315" or "ROC" when the campus map knows the building. */
+export function classRoom(series: ClassSeries): string | null {
+  const found = matchBuilding(series.location);
+  if (!found) return null;
+  return found.room
+    ? `${found.building.code} ${found.room}`
+    : found.building.code;
+}
+/** A matched room reads short, so a pasted campus address never fills it. */
+export function classWarning({ series, end }: ClassTime) {
+  const room = classRoom(series);
+  return room
+    ? `You'd need to leave ${room} before class ends at ${clockTime(end)}.`
+    : `You'd need to leave class before it ends at ${clockTime(end)}.`;
 }
 
 /** A trip destination for a class: a verified entrance, or the building name

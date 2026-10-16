@@ -26,6 +26,18 @@ export function routeName(route: RouteDetails | undefined) {
   }
   return route.longName || name;
 }
+export type TransferLevel = 'comfortable' | 'tight' | 'risky';
+/** The router's scheduled shortfall in words. Missing more than 180 of the 300
+ * spare seconds leaves under two minutes. A threshold, not a probability. */
+export function transferLevel(risk: number | undefined): TransferLevel | null {
+  if (risk === undefined) return null;
+  return risk === 0 ? 'comfortable' : risk <= 180 ? 'tight' : 'risky';
+}
+/** The tightest connection, or null when the response has no per-leg risk. */
+export function worstTransfer(j: GeographicJourney): TransferLevel | null {
+  const risks = transitLegs(j).flatMap((l) => l.scheduledTransferRisk ?? []);
+  return risks.length ? transferLevel(Math.max(...risks)) : null;
+}
 export const stopName = (refs: References, id: string) =>
   refs.stops.find((s) => s.stopId === id)?.name ?? 'Transit stop';
 /** Arrive-by options leave at different times, so arriving first is not
