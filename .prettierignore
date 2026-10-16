@@ -16,7 +16,6 @@ docs/ARCHITECTURE.md
 docs/ROADMAP.md
 docs/TECH_STACK.md
 docs/DATA_FEASIBILITY*.md
-docs/OPEN_SOURCE*.md
 docs/adr/
 .github/ISSUE_TEMPLATE/
 .github/PULL_REQUEST_TEMPLATE.md
