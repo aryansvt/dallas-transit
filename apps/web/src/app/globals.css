@@ -516,6 +516,13 @@ time {
 }
 .local-place .secondary {
   font-size: 14px;
+  /* long addresses stay secondary; the full text is in the title */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
 }
 .local-save {
   margin-left: 2px;
@@ -741,6 +748,9 @@ time {
   padding: 12px 16px;
   font-size: 16px;
   margin: 12px 0 16px;
+}
+.save-limit {
+  animation: rise 200ms var(--ease-out) both;
 }
 .state-message {
   padding: 20px;
@@ -1690,6 +1700,11 @@ time {
   .search-content,
   .departure-content {
     padding-inline: 14px;
+  }
+  /* keep map actions on one row so they never cover markers; the label
+     remains the button's accessible name */
+  .expand-label {
+    @apply sr-only;
   }
 }
 @media (min-width: 600px) {

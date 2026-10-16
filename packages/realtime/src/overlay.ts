@@ -2,6 +2,7 @@ import {
   buildSchedule,
   type GeographicJourney,
   type RoutingSchedule,
+  type ScheduledTrip,
   type TransitLeg,
 } from '@dallas-transit/router';
 import { freshness, usable } from './freshness.js';
@@ -32,6 +33,8 @@ export function overlayJourney(
   observe?.(matched.diagnostics);
   const legs: LiveLeg[] = [];
   const reasons = new Set<string>();
+  // journey trips, looked up once instead of per alert selector
+  const journeyTrips = new Map<string, ScheduledTrip>();
   for (const [legIndex, leg] of journey.legs.entries()) {
     if (leg.kind !== 'transit') continue;
     const trip = schedule.trips.find((t) => t.id === leg.tripId);
@@ -45,6 +48,7 @@ export function overlayJourney(
       trip.events[leg.alightingOccurrence]?.stopId !== leg.alightingStopId
     )
       throw new Error('journey-leg-mismatch');
+    journeyTrips.set(trip.id, trip);
     const match = matched.trips.get(leg.tripId);
     const state = match
       ? freshness(
@@ -203,7 +207,7 @@ export function overlayJourney(
             if (!s.agencyId && !s.routeId && !s.stopId && !s.trip) return false;
             return journey.legs.some((l) => {
               if (l.kind !== 'transit') return false;
-              const trip = schedule.trips.find((t) => t.id === l.tripId)!;
+              const trip = journeyTrips.get(l.tripId)!;
               return (
                 (!s.routeId || s.routeId === l.routeId) &&
                 (!s.trip || matches(s.trip, trip, schedule.serviceDate)) &&

@@ -163,6 +163,9 @@ it('discards abandoned suggestions before session expiry', async () => {
   );
   await tick(250);
   expect(container.querySelectorAll('[role="option"]')).toHaveLength(1);
+  expect(container.querySelector('.search-status')?.textContent).toBe(
+    '1 place found.',
+  );
   await tick(175000);
   expect(container.querySelectorAll('[role="option"]')).toHaveLength(0);
   expect(container.textContent).toContain('Search expired');

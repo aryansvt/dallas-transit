@@ -13,6 +13,7 @@ import {
 } from '../preview/fixtures';
 import type { TransitClient } from '../lib/api';
 import { ClientError } from '../lib/api';
+import { MAX_SAVED, SAVED_FULL_MESSAGE } from '../lib/local-places';
 vi.mock('./journey-map', () => ({
   JourneyMap: () => (
     <div aria-label="Journey map">Map integration boundary</div>
@@ -205,6 +206,62 @@ it('keeps preview saves isolated from device storage', async () => {
     button('Remove destination from saved places').getAttribute('aria-pressed'),
   ).toBe('true');
   expect(spy).not.toHaveBeenCalled();
+});
+it('explains a full saved list instead of silently dropping a saved place', async () => {
+  const saved = Array.from({ length: MAX_SAVED }, (_, i) => ({
+    ...previewDestination,
+    name: `Saved ${i}`,
+  }));
+  const full = { version: 1 as const, recent: [], saved };
+  for (const scenario of ['direct', 'granted'] as const) {
+    await act(async () =>
+      root.render(
+        <TransitApp
+          key={scenario}
+          preview={{
+            ...previewSetup(scenario),
+            saved: { ...full, recent: [previewDestination] },
+          }}
+          client={previewClient}
+        />,
+      ),
+    );
+    await click(
+      button(
+        scenario === 'direct'
+          ? 'Save destination'
+          : `Save ${previewDestination.name}`,
+      ),
+    );
+    expect(container.querySelector('.save-limit')?.textContent).toBe(
+      SAVED_FULL_MESSAGE,
+    );
+    expect(container.querySelector('.save-limit')?.getAttribute('role')).toBe(
+      'status',
+    );
+  }
+  // every original saved place is still listed
+  for (const place of saved)
+    expect(container.textContent).toContain(place.name);
+  await click(button(`Unsave ${saved[0]!.name}`));
+  expect(container.querySelector('.save-limit')).toBeNull();
+});
+it('clears earlier results when a new search cannot start', async () => {
+  await render('results', {
+    ...previewClient,
+    journeys: async () => previewResponse(),
+  });
+  await click(button('Find routes'));
+  await tick(10);
+  expect(container.querySelectorAll('.route-card')).toHaveLength(3);
+  // 00:30 on the night Dallas clocks move back precedes that service day
+  vi.setSystemTime(new Date('2026-11-01T05:30:00Z'));
+  await click(button('Find routes'));
+  await tick(10);
+  expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+    'previous day',
+  );
+  expect(container.querySelectorAll('.route-card')).toHaveLength(0);
 });
 it('consumes real-client-shaped success after Find routes', async () => {
   await render('results', {

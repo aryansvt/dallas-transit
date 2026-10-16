@@ -3,7 +3,10 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { publishPedestrianEvidence } from './pedestrian-links.js';
+import {
+  loadPedestrianLinks,
+  publishPedestrianEvidence,
+} from './pedestrian-links.js';
 import { route } from '@dallas-transit/router';
 import { activateFeed } from './activation.js';
 import {
@@ -231,6 +234,7 @@ describe('database-to-router boundary', () => {
       validFrom: '2026-09-17',
       validThrough: '2026-09-17',
       retainUntil: '2099-01-01T00:00:00Z',
+      // several links in one batch, with exact numeric round trips
       links: [
         {
           id: 'synthetic',
@@ -238,6 +242,20 @@ describe('database-to-router boundary', () => {
           toStopId: 's2',
           durationSeconds: 30,
           pedestrian: { distanceMeters: 40, provenance: 'synthetic' },
+        },
+        {
+          id: 'synthetic-b',
+          fromStopId: 's2',
+          toStopId: 's3',
+          durationSeconds: 1800,
+          pedestrian: { distanceMeters: 333.3, provenance: 'synthetic' },
+        },
+        {
+          id: 'synthetic-c',
+          fromStopId: 's3',
+          toStopId: 's1',
+          durationSeconds: 0,
+          pedestrian: { distanceMeters: 2500, provenance: 'synthetic-alt' },
         },
       ],
     };
@@ -255,6 +273,48 @@ describe('database-to-router boundary', () => {
       evidence.links,
     );
     await migrate(db); // applied migrations are immutable and repeat safely
+  });
+  it('publishes the full 100000-link evidence cap in one statement', async () => {
+    // a VALUES list would bind 7 x 100000 parameters; postgres allows 65535
+    const stops = Array.from({ length: 320 }, (_, i) => `bulk${i}`);
+    const bulkFiles = {
+      ...files,
+      'stops.txt':
+        files['stops.txt'] +
+        stops
+          .map(
+            (id, i) =>
+              `${id},,Bulk ${i},,${(32.2 + i / 10000).toFixed(6)},-96.100000,,,`,
+          )
+          .join('\n') +
+        '\n',
+    };
+    const archivePath = join(directory, 'bulk.zip');
+    await writeZip(archivePath, bulkFiles);
+    const bulkId = (await importFeed(db, { ...source, archivePath })).feedId;
+    const links = stops
+      .flatMap((from) =>
+        stops.filter((to) => to !== from).map((to) => [from, to]),
+      )
+      .slice(0, 100000)
+      .map(([from, to], n) => ({
+        id: `bulk-${String(n).padStart(6, '0')}`,
+        fromStopId: from!,
+        toStopId: to!,
+        durationSeconds: n % 1801,
+        pedestrian: { distanceMeters: (n % 25000) / 10, provenance: 'bulk' },
+      }));
+    expect(links).toHaveLength(100000);
+    await publishPedestrianEvidence(db, {
+      publicationId: bulkId,
+      evidenceId: 'bulk-v1',
+      rightsReference: 'test-generated synthetic data',
+      validFrom: '2026-09-17',
+      validThrough: '2026-09-17',
+      retainUntil: '2099-01-01T00:00:00Z',
+      links,
+    });
+    expect(await loadPedestrianLinks(db, bulkId, '2026-09-17')).toEqual(links);
   });
   it('rolls back a failed read and leaves its client usable', async () => {
     const otherName = `routing_empty_${randomUUID().replaceAll('-', '')}`;

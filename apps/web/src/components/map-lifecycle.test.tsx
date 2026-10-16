@@ -15,6 +15,7 @@ const probe = vi.hoisted(() => ({
   markers: 0,
   markersRemoved: 0,
   positions: [] as number[][],
+  fits: [] as { padding: Record<string, number> }[],
   listeners: new Map<string, Set<() => void>>(),
 }));
 vi.mock('maplibre-gl', () => ({
@@ -31,7 +32,9 @@ vi.mock('maplibre-gl', () => ({
     off(event: string, listener: () => void) {
       probe.listeners.get(event)?.delete(listener);
     }
-    fitBounds() {}
+    fitBounds(_bounds: unknown, options: { padding: Record<string, number> }) {
+      probe.fits.push(options);
+    }
     jumpTo() {}
     resize() {}
     remove() {
@@ -76,6 +79,7 @@ afterEach(() => {
     markers: 0,
     markersRemoved: 0,
     positions: [],
+    fits: [],
     listeners: new Map(),
   });
 });
@@ -312,6 +316,50 @@ it('updates route points without replacing the visible map and releases resource
   expect(probe.markersRemoved).toBe(probe.markers);
 });
 
+it('fits markers clear of the map buttons and caption', async () => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  vi.stubGlobal(
+    'IntersectionObserver',
+    class {
+      constructor(
+        private callback: (entries: { isIntersecting: boolean }[]) => void,
+      ) {}
+      observe() {
+        this.callback([{ isIntersecting: true }]);
+      }
+      disconnect() {}
+    },
+  );
+  const container = document.createElement('div');
+  const root = createRoot(container);
+  const at = (latitude: number): MapPoint => ({
+    key: String(latitude),
+    kind: 'stop',
+    symbol: '1',
+    label: 'Stop',
+    coordinate: { latitude, longitude: -96.8 },
+  });
+  try {
+    await act(async () =>
+      root.render(
+        <JourneyMap
+          points={[at(32.7), at(32.9)]}
+          styleUrl={mapboxStyle('pk.fixture')!}
+        />,
+      ),
+    );
+    await act(async () => {
+      await vi.dynamicImportSettled();
+    });
+    const { padding } = probe.fits.at(-1)!;
+    // measured chrome: button row ends 60px from the top, the caption 77px
+    // from the bottom; a 34px marker needs half its height clear of both
+    expect(padding.top).toBeGreaterThan(60 + 17);
+    expect(padding.bottom).toBeGreaterThan(77 + 17);
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
 it('does not create a map for an offscreen mobile panel', async () => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   vi.stubGlobal(
