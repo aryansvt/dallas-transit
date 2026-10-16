@@ -13,6 +13,14 @@ import { Dialog } from './dialog';
 import { Icon } from './icon';
 import { samePlace } from '../lib/local-places';
 
+export type SearchTarget = 'origin' | 'destination' | 'home' | 'school';
+const titles: Record<SearchTarget, string> = {
+  origin: 'Your starting point',
+  destination: 'Your destination',
+  home: 'Set Home',
+  school: 'Set School',
+};
+
 export function PlaceSearch({
   target,
   client,
@@ -20,14 +28,20 @@ export function PlaceSearch({
   onClose,
   initialQuery = '',
   localPlaces = [],
+  quickPlaces = [],
+  onRemove,
   context,
 }: {
-  target: 'origin' | 'destination';
+  target: SearchTarget;
   client: TransitClient;
   onSelect(place: Place): void;
   onClose(): void;
   initialQuery?: string;
   localPlaces?: Place[];
+  /** Fixed suggestions such as student places, after this device's places. */
+  quickPlaces?: readonly Place[];
+  /** Clears what is being set, such as Home. */
+  onRemove?: () => void;
   context?: SearchContext;
 }) {
   const [query, setQuery] = useState(initialQuery);
@@ -115,12 +129,16 @@ export function PlaceSearch({
   );
   const remotePlaces =
     result?.query === query.trim() ? result.data.suggestions : [];
+  const matches = (p: Place) =>
+    `${p.name} ${p.context ?? ''}`
+      .toLowerCase()
+      .includes(query.trim().toLowerCase());
   const matchingLocal = localPlaces.filter(
     (p, i, all) =>
-      all.findIndex((other) => samePlace(p, other)) === i &&
-      `${p.name} ${p.context ?? ''}`
-        .toLowerCase()
-        .includes(query.trim().toLowerCase()),
+      all.findIndex((other) => samePlace(p, other)) === i && matches(p),
+  );
+  const matchingQuick = quickPlaces.filter(
+    (p) => matches(p) && !matchingLocal.some((other) => samePlace(p, other)),
   );
   const places = [
     ...matchingLocal.map((p, i): PlaceSuggestion => ({
@@ -130,11 +148,21 @@ export function PlaceSearch({
       kind: p.transit ? 'transit' : 'place',
       place: p,
     })),
+    ...matchingQuick.map((p, i): PlaceSuggestion => ({
+      id: `quick:${i}`,
+      name: p.name,
+      ...(p.context ? { context: p.context } : {}),
+      kind: 'place',
+      place: p,
+    })),
     ...remotePlaces.filter(
       (p) =>
-        !p.place || !matchingLocal.some((other) => samePlace(p.place!, other)),
+        !p.place ||
+        ![...matchingLocal, ...matchingQuick].some((other) =>
+          samePlace(p.place!, other),
+        ),
     ),
-  ].slice(0, 6);
+  ].slice(0, quickPlaces.length ? 10 : 6);
   const choose = async (suggestion: PlaceSuggestion) => {
     if (selecting) return;
     selection.current?.abort();
@@ -183,7 +211,7 @@ export function PlaceSearch({
       ? 'Getting place details…'
       : query.trim().length < 2
         ? places.length
-          ? 'Choose a place from this device, or search by name or street address.'
+          ? 'Choose a place below, or search by name or street address.'
           : 'Enter a place name or street address.'
         : loading || result?.query !== query.trim()
           ? 'Searching places…'
@@ -193,10 +221,7 @@ export function PlaceSearch({
               ? 'No places found. Try a fuller name or street address.'
               : `${places.length} place${places.length === 1 ? '' : 's'} found.`);
   return (
-    <Dialog
-      title={target === 'origin' ? 'Your starting point' : 'Your destination'}
-      onClose={onClose}
-    >
+    <Dialog title={titles[target]} onClose={onClose}>
       <div className="search-content">
         <label htmlFor={id} className="field-label">
           Search places in Dallas
@@ -280,6 +305,11 @@ export function PlaceSearch({
         </ul>
         {result?.data.attribution && (
           <p className="secondary">{result.data.attribution}</p>
+        )}
+        {onRemove && (
+          <button type="button" className="text-button" onClick={onRemove}>
+            Remove {target === 'home' ? 'Home' : 'School'}
+          </button>
         )}
       </div>
     </Dialog>

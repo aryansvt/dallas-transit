@@ -1,5 +1,8 @@
 import type { JourneyResponse, Place } from '@dallas-transit/shared';
+import type { Departure } from '../components/departure-sheet';
+import type { ClassSeries } from './ics';
 import type { LocalPlaces } from './local-places';
+import type { Presets } from './presets';
 
 /** Initial state for the /preview workspace; live use passes none. */
 export interface PreviewSetup {
@@ -12,4 +15,9 @@ export interface PreviewSetup {
   error?: string;
   expanded?: boolean;
   saved?: LocalPlaces;
+  presets?: Presets;
+  schedule?: ClassSeries[];
+  departure?: Departure;
+  /** A fixed clock, ISO, so class-dependent screens repeat. */
+  now?: string;
 }

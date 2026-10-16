@@ -15,6 +15,8 @@ const clock = new Intl.DateTimeFormat('en-US', {
   minute: '2-digit',
 });
 
+/** "9:50 AM" in Dallas time. */
+export const clockTime = (instant: Date) => clock.format(instant);
 export function dallasParts(instant: Date) {
   const p = Object.fromEntries(
     civil.formatToParts(instant).map((p) => [p.type, p.value]),

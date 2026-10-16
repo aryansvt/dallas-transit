@@ -18,6 +18,16 @@ it('assigns comparative labels only for distinct winning metrics', () => {
   expect(distinction(journeys[2]!, journeys)).toBe('Least walking');
   expect(distinction(journeys[0]!, [journeys[0]!])).toBe('');
 });
+it('tags the latest leave, not the earliest arrival, for arrive-by options', () => {
+  // these leave at different times, so arriving first is not fastest
+  const journeys = previewResponse().journeys.map((j, i) => ({
+    ...j,
+    requestedDepartureTime: [28860, 28980, 29640][i]!,
+  }));
+  const tags = journeys.map((j) => distinction(j, journeys, true));
+  expect(tags).toEqual(['', 'No transfers', 'Leaves latest']);
+  expect(tags).not.toContain('Fastest');
+});
 it('uses zero-transfer facts for ties without manufacturing a distinction for tied transfer journeys', () => {
   const journey = previewResponse().journeys[1]!;
   const duplicate = { ...journey };

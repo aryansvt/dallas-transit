@@ -541,6 +541,275 @@ time {
   margin-top: 12px;
 }
 
+/* home and school, student places */
+.shortcuts {
+  margin-top: 28px;
+}
+.shortcuts section + section {
+  margin-top: 24px;
+}
+.shortcuts h2,
+.class-panel h2 {
+  font-size: 19px;
+}
+.shortcuts h2 {
+  margin: 0 0 12px;
+}
+.preset-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.preset-list li {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+}
+/* shortcuts read as ink tiles, unset ones as an outline to fill in */
+.preset-list .local-place > .icon:first-child {
+  background: var(--board);
+  color: var(--accent);
+}
+.preset-list .unset-preset > .icon:first-child {
+  background: transparent;
+  color: var(--muted);
+  box-shadow: inset 0 0 0 1.5px var(--field);
+}
+.preset-list .unset-preset strong {
+  font-weight: 600;
+}
+.place-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.place-chip {
+  min-height: 48px;
+  padding: 10px 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-quiet);
+  font-size: 16px;
+  font-weight: 600;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    transform 120ms var(--ease-out);
+}
+.place-chip:active {
+  transform: scale(0.97);
+}
+
+/* class schedule */
+.class-panel {
+  margin-top: 28px;
+}
+.next-class {
+  background: var(--board);
+  color: var(--board-text);
+  border-radius: 20px;
+  padding: 18px;
+  animation: rise 200ms var(--ease-out) both;
+}
+.class-now {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--board-line);
+  color: var(--board-muted);
+  font-size: 15px;
+  font-weight: 600;
+}
+.next-class-time {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+  color: var(--board-muted);
+  font-size: 15px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.next-class-clock {
+  font-family: var(--font-display);
+  font-size: 44px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+}
+.next-class-title {
+  margin: 12px 0 2px;
+  font-size: 19px;
+  font-weight: 600;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+.next-class-room,
+.next-class-note {
+  margin: 0 0 16px;
+  color: var(--board-muted);
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+.next-class-note {
+  margin-top: 12px;
+}
+.next-class > .next-class-note:only-child {
+  margin: 0;
+}
+.secondary-button.on-board {
+  background: transparent;
+  color: var(--board-text);
+  border-color: var(--board-muted);
+}
+.import-note {
+  margin: 0 0 12px;
+  animation: rise 200ms var(--ease-out) both;
+}
+.import-zone + .import-note {
+  margin-top: 12px;
+}
+.import-zone {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+  border: 1.5px dashed var(--field);
+  border-radius: 16px;
+  cursor: pointer;
+  transition:
+    background-color 160ms var(--ease-out),
+    border-color 160ms var(--ease-out),
+    transform 120ms var(--ease-out);
+}
+.import-zone strong {
+  display: block;
+  font-size: 17px;
+  font-weight: 600;
+}
+.import-zone .secondary {
+  display: block;
+  font-size: 14px;
+  margin-top: 2px;
+}
+.import-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: var(--board);
+  color: var(--accent);
+  transition: transform 220ms var(--ease-out);
+}
+.import-zone:active {
+  transform: scale(0.99);
+}
+.import-zone.dragging {
+  border-style: solid;
+  border-color: var(--ink);
+  background: var(--accent-soft);
+}
+.import-zone.dragging .import-icon {
+  transform: translateY(-2px) scale(1.06);
+}
+.import-zone:focus-within,
+.class-actions .secondary-button:focus-within {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+.class-list {
+  margin-top: 12px;
+  padding: 4px 16px 16px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+  animation: rise 200ms var(--ease-out) both;
+}
+.class-list ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  /* a whole-calendar import scrolls here instead of burying the page */
+  max-height: min(60vh, 560px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.class-list li {
+  display: grid;
+  gap: 2px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+.class-list li strong {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.class-list .secondary {
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.class-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 16px;
+}
+.class-actions .secondary-button {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+}
+.class-list .local-note {
+  margin-top: 12px;
+}
+
+/* departure-time insight */
+.insight {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px 12px;
+  align-items: start;
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border: 1px solid #e9cf94;
+  border-radius: 14px;
+  background: var(--accent-soft);
+  animation: rise 220ms var(--ease-out) both;
+}
+.insight-icon {
+  grid-row: span 2;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  background: var(--board);
+  color: var(--accent);
+}
+.insight p {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.4;
+}
+.insight .secondary-button {
+  grid-column: 2;
+  justify-self: start;
+  margin-top: 8px;
+  padding: 8px 14px;
+  font-size: 15px;
+}
+
 /* results */
 .results-section {
   margin-top: 28px;
@@ -551,11 +820,17 @@ time {
 }
 .results-caption {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   color: var(--muted);
   font-size: 14px;
   margin: -4px 0 14px;
+}
+.caption-deadline {
+  white-space: nowrap;
+  font-weight: 600;
+  color: var(--ink);
 }
 .schedule-tag {
   display: inline-flex;
@@ -1486,6 +1761,29 @@ time {
   font-size: 17px;
   font-weight: 500;
 }
+.time-fields {
+  animation: rise 200ms var(--ease-out) both;
+}
+.buffer-field {
+  animation: rise 200ms var(--ease-out) both;
+  display: grid;
+  gap: 6px;
+  font-size: 15px;
+  font-weight: 700;
+}
+.buffer-field select {
+  height: 52px;
+  border: 2px solid var(--ink);
+  border-radius: 12px;
+  background: var(--surface);
+  padding: 0 10px;
+  font-size: 17px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.time-fields > .secondary {
+  margin: 12px 0 0;
+}
 .overnight-help {
   margin: 16px 0 24px;
   font-size: 15px;
@@ -1634,6 +1932,17 @@ time {
   .departure-button:hover,
   .secondary-button:hover {
     background-color: #dfe3db;
+  }
+  .place-chip:hover {
+    background-color: #dfe3db;
+    border-color: var(--field);
+  }
+  .import-zone:hover {
+    border-color: var(--ink);
+    background-color: var(--surface);
+  }
+  .secondary-button.on-board:hover {
+    background-color: var(--board-2);
   }
   .detail-summary .icon-button:hover {
     background-color: var(--board-2);

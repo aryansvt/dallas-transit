@@ -108,15 +108,13 @@ it('supports combobox arrow/Enter selection and restores focus', async () => {
   expect(container.querySelector('dialog')).toBeNull();
   expect(container.textContent).toContain(previewPlaces[0]!.name);
 });
-it('opens departure options without arrive-by, applies the choice, restores the opener', async () => {
+it('opens time options, applies the choice, restores the opener', async () => {
   await render();
   const opener = button('Leave now');
   await click(opener);
   expect(container.querySelector('dialog')?.textContent).toContain('Depart at');
-  expect(container.querySelector('dialog')?.textContent).not.toContain(
-    'Arrive by',
-  );
-  await click(button('Set departure'));
+  expect(container.querySelector('dialog')?.textContent).toContain('Arrive by');
+  await click(button('Set time'));
   expect(document.activeElement).toBe(opener);
 });
 it('plans, shows alternatives, opens direct instructions, and returns to results', async () => {
@@ -307,7 +305,7 @@ it('does not repeat journey or place requests for unrelated UI changes', async (
   await click(button('Save destination'));
   await click(button('All route options'));
   await click(button('Leave now'));
-  await click(button('Close when do you want to leave?'));
+  await click(button('Close when are you traveling?'));
   await tick(300);
   expect(journeys).toHaveBeenCalledTimes(1);
   expect(places).not.toHaveBeenCalled();

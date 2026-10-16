@@ -2,16 +2,43 @@
 import { useMemo, useRef, useState } from 'react';
 import type { StyleSpecification } from 'maplibre-gl';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import type { Place } from '@dallas-transit/shared';
+import { copyPlace, type Place } from '@dallas-transit/shared';
 import { liveClient, type TransitClient } from '../lib/api';
+import {
+  CLASS_BUFFER_MINUTES,
+  classDestination,
+  earliestLeave,
+  readSchedule,
+  writeSchedule,
+  type ClassTime,
+} from '../lib/class-schedule';
+import type { ClassSeries } from '../lib/ics';
 import { addRecent } from '../lib/local-places';
 import { journeyPoints } from '../lib/map-points';
-import { departureAt, leaveNow, dallasParts, shiftDate } from '../lib/time';
+import {
+  emptyPresets,
+  readPresets,
+  setPreset,
+  writePresets,
+} from '../lib/presets';
+import { STUDENT_PLACES } from '../lib/student-places';
+import {
+  arriveBy,
+  departureAt,
+  leaveNow,
+  dallasParts,
+  serviceInstant,
+  shiftDate,
+} from '../lib/time';
+import { useDeviceStore } from '../hooks/use-device-store';
 import { useJourneySearch } from '../hooks/use-journey-search';
 import { useLocalPlaces } from '../hooks/use-local-places';
+import { useNow } from '../hooks/use-now';
 import { useStartupOrigin } from '../hooks/use-startup-origin';
+import { ClassSchedule } from './class-schedule';
 import { DepartureSheet, type Departure } from './departure-sheet';
-import { PlaceSearch } from './place-search';
+import { HomeShortcuts } from './home-shortcuts';
+import { PlaceSearch, type SearchTarget } from './place-search';
 import { Timeline } from './journey';
 import { JourneyMap } from './journey-map';
 import { AppHeader } from './app-header';
@@ -21,6 +48,25 @@ import { RouteResults } from './route-results';
 import { JourneySummary } from './journey-summary';
 import { LocalPlaceList } from './local-place-list';
 import type { PreviewSetup } from '../lib/preview-setup';
+
+const quickPlaces = STUDENT_PLACES.map(copyPlace);
+const noClasses = (): ClassSeries[] => [];
+/** Request times for a departure choice. During a class, departure-time insight
+ * gets the class end as the earliest leave. */
+function requestTime(d: Departure, now: Date, classes: readonly ClassSeries[]) {
+  if (d.mode === 'by')
+    return {
+      ...arriveBy(d.date, d.time),
+      arrivalBufferMinutes: d.bufferMinutes,
+    };
+  const t =
+    d.mode === 'now'
+      ? leaveNow(now)
+      : departureAt(d.date, d.time, d.previousDay);
+  const earliest = earliestLeave(classes, t.serviceDate, t.departureTime);
+  return earliest === undefined ? t : { ...t, earliestDepartureTime: earliest };
+}
+
 export function TransitApp({
   client = liveClient,
   preview,
@@ -68,11 +114,33 @@ function Planner({
     preview?.saved,
     !preview,
   );
-  const [searchTarget, setSearchTarget] = useState<
-    'origin' | 'destination' | null
-  >(preview?.search ? 'destination' : null);
+  const presetStore = useDeviceStore(
+    readPresets,
+    writePresets,
+    emptyPresets,
+    preview?.presets,
+    !preview,
+    'Home and School are available for this visit only. Device storage is unavailable.',
+  );
+  const presets = presetStore.value;
+  const scheduleStore = useDeviceStore(
+    readSchedule,
+    writeSchedule,
+    noClasses,
+    preview?.schedule,
+    !preview,
+    'Your classes are available for this visit only. Device storage is unavailable.',
+  );
+  const classes = scheduleStore.value;
+  const now = useNow(preview?.now);
+  const [searchTarget, setSearchTarget] = useState<SearchTarget | null>(
+    preview?.search ? 'destination' : null,
+  );
+  const [searchQuery, setSearchQuery] = useState('');
   const [departureOpen, setDepartureOpen] = useState(false);
-  const [departure, setDeparture] = useState<Departure>({ mode: 'now' });
+  const [departure, setDeparture] = useState<Departure>(
+    preview?.departure ?? { mode: 'now' },
+  );
   const trip = useJourneySearch(client, preview);
   const { data, result, journey, detail, loading, error, liveId } = trip;
   const resultsRef = useRef<HTMLElement>(null);
@@ -83,22 +151,40 @@ function Planner({
     () => journeyPoints(journey, result?.references, origin, destination),
     [journey, result?.references, origin, destination],
   );
-  const choosePlace = (p: Place, target: 'origin' | 'destination') => {
+  const choosePlace = (p: Place, target: SearchTarget) => {
+    setSearchTarget(null);
+    if (target === 'home' || target === 'school') {
+      presetStore.persist(setPreset(presets, target, p));
+      return;
+    }
     trip.reset();
     if (target === 'origin') chooseOrigin(p);
     else setDestination(p);
-    setSearchTarget(null);
   };
-  const findRoutes = () => {
+  const openSearch = (target: SearchTarget, query = '') => {
+    setSearchQuery(query);
+    setSearchTarget(target);
+  };
+  /** Search with the current choices, or with ones set in the same tap. */
+  const findRoutes = (
+    next: {
+      origin?: Place | null;
+      destination?: Place;
+      departure?: Departure;
+    } = {},
+  ) => {
+    const from = next.origin === undefined ? origin : next.origin;
+    const to = next.destination ?? destination;
+    const when = next.departure ?? departure;
     trip.clearReplacement();
-    if (!origin) {
+    if (!from) {
       originButton.current?.focus();
-      setSearchTarget('origin');
+      openSearch('origin');
       return;
     }
-    if (!destination) {
+    if (!to) {
       destinationButton.current?.focus();
-      setSearchTarget('destination');
+      openSearch('destination');
       return;
     }
     const coordinate = (p: Place) => ({
@@ -106,15 +192,44 @@ function Planner({
       longitude: p.longitude,
     });
     const started = trip.start(() => ({
-      origin: coordinate(origin),
-      destination: coordinate(destination),
-      ...(departure.mode === 'now'
-        ? leaveNow()
-        : departureAt(departure.date, departure.time, departure.previousDay)),
+      origin: coordinate(from),
+      destination: coordinate(to),
+      ...requestTime(when, preview?.now ? now : new Date(), classes),
     }));
     if (!started) return;
-    persist(addRecent(places, destination));
+    persist(addRecent(places, to));
     resultsRef.current?.focus();
+  };
+  // next class: its entrance, arriving by the start with a buffer
+  const planClass = (next: ClassTime) => {
+    const target = classDestination(next.series);
+    if (!target || !('place' in target)) return;
+    const start = dallasParts(next.start);
+    const when: Departure = {
+      mode: 'by',
+      date: start.date,
+      time: start.time,
+      bufferMinutes: CLASS_BUFFER_MINUTES,
+    };
+    const from = origin ?? presets.home;
+    trip.reset();
+    if (!origin && presets.home) chooseOrigin(presets.home);
+    setDestination(target.place);
+    setDeparture(when);
+    findRoutes({ origin: from, destination: target.place, departure: when });
+  };
+  // departure-time insight: plan again from the suggested time
+  const planAt = (seconds: number) => {
+    if (!result) return;
+    const at = dallasParts(serviceInstant(result.serviceDate, seconds));
+    const when: Departure = {
+      mode: 'at',
+      date: at.date,
+      time: at.time,
+      previousDay: at.date !== result.serviceDate,
+    };
+    setDeparture(when);
+    findRoutes({ departure: when });
   };
   const showJourney = (index: number) => {
     trip.show(index);
@@ -130,6 +245,33 @@ function Planner({
       resultsRef.current?.focus();
     });
   };
+  const schedule = (
+    <ClassSchedule
+      key="schedule"
+      classes={classes}
+      now={now}
+      onImport={scheduleStore.persist}
+      onRemove={() => scheduleStore.persist([])}
+      onPlan={planClass}
+      onChoose={(query) => openSearch('destination', query)}
+    />
+  );
+  const shortcuts = (
+    <HomeShortcuts
+      key="shortcuts"
+      presets={presets}
+      onChoose={(p) => choosePlace(p, 'destination')}
+      onEdit={(name) => openSearch(name)}
+    />
+  );
+  const localPlaces = (
+    <LocalPlaceList
+      key="places"
+      places={places}
+      onChoose={(p) => choosePlace(p, 'destination')}
+      onUpdate={persist}
+    />
+  );
   return (
     <>
       <a href="#planner-main" className="skip-link">
@@ -159,22 +301,33 @@ function Planner({
               departure={departure}
               originRef={originButton}
               destinationRef={destinationButton}
-              onSearch={setSearchTarget}
+              onSearch={(target) => openSearch(target)}
               onDeparture={() => setDepartureOpen(true)}
-              onSubmit={findRoutes}
+              onSubmit={() => findRoutes()}
             />
+            {/* keyed so the schedule keeps its state when it moves to the top */}
             {!data && !loading && !error && (
-              <LocalPlaceList
-                places={places}
-                onChoose={(p) => choosePlace(p, 'destination')}
-                onUpdate={persist}
-              />
+              <>
+                {classes.length > 0
+                  ? [schedule, shortcuts, localPlaces]
+                  : [shortcuts, localPlaces, schedule]}
+              </>
             )}
-            {storageMessage && (
-              <p role="status" className="secondary storage-message">
-                {storageMessage}
-              </p>
-            )}
+            {[
+              storageMessage,
+              presetStore.storageMessage,
+              scheduleStore.storageMessage,
+            ]
+              .filter(Boolean)
+              .map((message) => (
+                <p
+                  key={message}
+                  role="status"
+                  className="secondary storage-message"
+                >
+                  {message}
+                </p>
+              ))}
             <RouteResults
               ref={resultsRef}
               data={data}
@@ -186,9 +339,10 @@ function Planner({
                   'Search canceled. You can change your trip and search again.',
                 )
               }
-              onRetry={findRoutes}
+              onRetry={() => findRoutes()}
               onChangeDeparture={() => setDepartureOpen(true)}
               onSelect={showJourney}
+              onInsight={planAt}
             />
           </div>
           {detail && journey && result && (
@@ -275,7 +429,7 @@ function Planner({
             serviceDate:
               departure.mode === 'now'
                 ? dallasParts(new Date()).date
-                : departure.previousDay
+                : departure.mode === 'at' && departure.previousDay
                   ? shiftDate(departure.date, -1)
                   : departure.date,
             ...(consentedLocation
@@ -290,9 +444,19 @@ function Planner({
           target={searchTarget}
           client={client}
           localPlaces={[...places.saved, ...places.recent]}
+          quickPlaces={quickPlaces}
           onSelect={(p) => choosePlace(p, searchTarget)}
           onClose={() => setSearchTarget(null)}
-          initialQuery={preview?.search ? 'museum' : ''}
+          initialQuery={searchQuery || (preview?.search ? 'museum' : '')}
+          {...((searchTarget === 'home' || searchTarget === 'school') &&
+          presets[searchTarget]
+            ? {
+                onRemove: () => {
+                  presetStore.persist(setPreset(presets, searchTarget, null));
+                  setSearchTarget(null);
+                },
+              }
+            : {})}
         />
       )}
       {departureOpen && (
