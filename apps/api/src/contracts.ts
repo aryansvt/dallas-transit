@@ -122,6 +122,20 @@ export const referencesSchema = object({
   ),
 });
 const timing = { departureTime: number, arrivalTime: number };
+const transitLegProperties = {
+  kind: { const: 'transit' },
+  tripId: string,
+  routeId: string,
+  patternId: string,
+  boardingStopId: string,
+  boardingOccurrence: integer,
+  boardingSequence: integer,
+  alightingStopId: string,
+  alightingOccurrence: integer,
+  alightingSequence: integer,
+  scheduledTransferRisk: number,
+  ...timing,
+};
 export const legSchema = {
   anyOf: [
     object({
@@ -134,19 +148,12 @@ export const legSchema = {
       distanceMeters: number,
       ...timing,
     }),
-    object({
-      kind: { const: 'transit' },
-      tripId: string,
-      routeId: string,
-      patternId: string,
-      boardingStopId: string,
-      boardingOccurrence: integer,
-      boardingSequence: integer,
-      alightingStopId: string,
-      alightingOccurrence: integer,
-      alightingSequence: integer,
-      ...timing,
-    }),
+    object(
+      transitLegProperties,
+      Object.keys(transitLegProperties).filter(
+        (k) => k !== 'scheduledTransferRisk',
+      ),
+    ),
     object(
       {
         kind: { const: 'transfer' },
