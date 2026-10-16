@@ -28,7 +28,7 @@ export class IcsError extends Error {
 }
 
 export const MAX_ICS_LENGTH = 1_000_000;
-export const MAX_ICS_EVENTS = 500;
+const MAX_ICS_EVENTS = 500;
 /** Recurrences stop this many days after the first class. */
 export const MAX_SCAN_DAYS = 400;
 const DAY = 86400000;

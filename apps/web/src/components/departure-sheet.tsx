@@ -13,7 +13,7 @@ export type Departure =
   | { mode: 'now' }
   | { mode: 'at'; date: string; time: string; previousDay: boolean }
   | { mode: 'by'; date: string; time: string; bufferMinutes: number };
-export const BUFFER_CHOICES = [0, 5, 10, 15, 20, 30];
+const BUFFER_CHOICES = [0, 5, 10, 15, 20, 30];
 const clock = (date: string, time: string) =>
   new Intl.DateTimeFormat('en-US', {
     timeZone: DALLAS_TIMEZONE,

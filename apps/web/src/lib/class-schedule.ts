@@ -14,7 +14,7 @@ export const MAX_CLASSES = 80;
 /** Next-class trips arrive this many minutes before class starts. */
 export const CLASS_BUFFER_MINUTES = 10;
 /** Far enough to cover a weekend or a short break. */
-export const NEXT_CLASS_DAYS = 14;
+const NEXT_CLASS_DAYS = 14;
 const DAY = 86400000;
 export interface ClassTime {
   series: ClassSeries;
