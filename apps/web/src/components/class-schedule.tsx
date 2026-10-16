@@ -23,6 +23,7 @@ import {
 } from '../lib/time';
 import { matchBuilding } from '../lib/utd-buildings';
 import { Icon } from './icon';
+import { Clock } from './journey';
 
 const skippedNouns: Record<SkipReason, [string, string]> = {
   'all-day': ['all-day event', 'all-day events'],
@@ -234,7 +235,9 @@ export function ClassSchedule({
         {next ? (
           <>
             <p className="next-class-time">
-              <span className="next-class-clock">{clockTime(next.start)}</span>
+              <span className="next-class-clock">
+                <Clock text={clockTime(next.start)} />
+              </span>
               <span>{dayLabel(next.start, now)}</span>
             </p>
             <p className="next-class-title">{next.series.title}</p>
@@ -272,8 +275,9 @@ export function ClassSchedule({
           <p className="next-class-note">No classes in the next two weeks.</p>
         )}
       </div>
-      {open && (
-        <div className="class-list" id={listId}>
+      {/* stays mounted so it can expand and collapse; inert while closed */}
+      <div className="collapse" data-open={open}>
+        <div className="class-list" id={listId} inert={!open}>
           <ul>
             {classes.map((c) => (
               <li key={c.id}>
@@ -298,7 +302,7 @@ export function ClassSchedule({
             Classes are stored only on this device. The file itself is not kept.
           </p>
         </div>
-      )}
+      </div>
     </section>
   );
 }

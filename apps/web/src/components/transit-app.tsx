@@ -1,5 +1,6 @@
 'use client';
 import { useMemo, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import type { StyleSpecification } from 'maplibre-gl';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { copyPlace, type Place } from '@dallas-transit/shared';
@@ -52,6 +53,33 @@ import { LocalPlaceList } from './local-place-list';
 import type { PreviewSetup } from '../lib/preview-setup';
 
 const quickPlaces = STUDENT_PLACES.map(copyPlace);
+/** Results and trip detail morph into each other: the tapped card grows into
+ * the summary panel, and back. Without View Transitions it is a plain swap;
+ * with reduced motion, a crossfade. */
+function morph(
+  card: HTMLElement | undefined,
+  to: 'detail' | 'results',
+  update: () => void,
+  settle: () => void,
+) {
+  if (!document.startViewTransition) {
+    update();
+    requestAnimationFrame(settle);
+    return;
+  }
+  const moving = !matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // one element owns the name in each snapshot; the summary owns it in CSS
+  if (card && moving && to === 'detail') card.style.viewTransitionName = 'trip';
+  const transition = document.startViewTransition(() => {
+    flushSync(update);
+    if (card)
+      card.style.viewTransitionName = moving && to === 'results' ? 'trip' : '';
+    settle();
+  });
+  void transition.finished.finally(() => {
+    if (card) card.style.viewTransitionName = '';
+  });
+}
 const noClasses = (): ClassSeries[] => [];
 /** Request times for a departure choice. During a class, departure-time insight
  * gets the class end as the earliest leave. */
@@ -134,7 +162,7 @@ function Planner({
     'Your classes are available for this visit only. Device storage is unavailable.',
   );
   const classes = scheduleStore.value;
-  const now = useNow(preview?.now);
+  const now = useNow(preview?.now, preview?.fastClock);
   const [searchTarget, setSearchTarget] = useState<SearchTarget | null>(
     preview?.search ? 'destination' : null,
   );
@@ -248,20 +276,26 @@ function Planner({
           journey.requestedDepartureTime,
         )
       : null;
-  const showJourney = (index: number) => {
-    trip.show(index);
-    requestAnimationFrame(() => {
-      detailRef.current?.focus();
-      if (window.innerWidth < 1000)
-        window.scrollTo({ top: 0, behavior: 'instant' });
-    });
-  };
-  const goBack = () => {
-    trip.hide();
-    requestAnimationFrame(() => {
-      resultsRef.current?.focus();
-    });
-  };
+  const showJourney = (index: number) =>
+    morph(
+      resultsRef.current?.querySelectorAll<HTMLElement>('.route-card')[index],
+      'detail',
+      () => trip.show(index),
+      () => {
+        detailRef.current?.focus();
+        if (window.innerWidth < 1000)
+          window.scrollTo({ top: 0, behavior: 'instant' });
+      },
+    );
+  const goBack = () =>
+    morph(
+      resultsRef.current?.querySelectorAll<HTMLElement>('.route-card')[
+        trip.selected
+      ],
+      'results',
+      () => trip.hide(),
+      () => resultsRef.current?.focus(),
+    );
   const schedule = (
     <ClassSchedule
       key="schedule"
@@ -386,7 +420,7 @@ function Planner({
             points={points}
             {...(liveId ? { liveId, client } : {})}
             {...(mapStyle ? { styleUrl: mapStyle } : {})}
-            fixture={Boolean(preview)}
+            fixture={Boolean(preview) && !preview?.noMap}
             initiallyExpanded={preview?.expanded ?? false}
           />
         </div>

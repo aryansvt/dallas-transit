@@ -17,7 +17,7 @@ import {
   serviceInstant,
   serviceTime,
 } from '../lib/time';
-import { JourneyTime, RouteCard } from './journey';
+import { JourneyBar, JourneyTime, RouteCard, Tick } from './journey';
 import { Icon } from './icon';
 
 type OkResponse = Extract<JourneyResponse, { status: 'ok' }>;
@@ -64,13 +64,18 @@ function LeaveBoard({
       <h2 id="leave-title">
         <span className="eyebrow">Leave by</span>{' '}
         <span className="leave-time">
-          <JourneyTime
-            date={journey.serviceDate}
-            seconds={journey.requestedDepartureTime}
-          />
+          <Tick value={journey.requestedDepartureTime}>
+            <JourneyTime
+              date={journey.serviceDate}
+              seconds={journey.requestedDepartureTime}
+            />
+          </Tick>
         </span>
       </h2>
-      <span className="leave-when">{fromNow(leave, now)}</span>
+      <span className="leave-when">
+        <Tick value={fromNow(leave, now)}>{fromNow(leave, now)}</Tick>
+      </span>
+      <JourneyBar journey={journey} references={result.references} />
       <dl className="leave-facts">
         <div>
           <dt>Arrive</dt>
@@ -213,10 +218,17 @@ export function RouteResults({
               </button>
             </div>
             <p>Checking departures and walking connections.</p>
-            <div className="route-skeleton" aria-hidden="true">
-              <i />
-              <i />
-              <i />
+            {/* placeholder cards in the real card's shape, a light running
+                along each route line */}
+            <div className="route-skeletons" aria-hidden="true">
+              {[0, 1, 2].map((i) => (
+                <div className="route-skeleton" key={i}>
+                  <i className="sk-time" />
+                  <i className="sk-line" />
+                  <i className="sk-text" />
+                  <i className="sk-text sk-short" />
+                </div>
+              ))}
             </div>
           </div>
         )}

@@ -3,6 +3,8 @@
 /* station board: paper canvas, ink board panels, one amber voice */
 :root {
   color-scheme: light;
+  /* lets details and collapses animate to their natural height */
+  interpolate-size: allow-keywords;
   --canvas: #f3f3ee;
   --surface: #fff;
   --surface-quiet: #e9ebe5;
@@ -33,6 +35,7 @@
   --text-headline: 30px;
   --text-time: 44px;
   --text-time-xl: 64px;
+  --text-time-hero: clamp(60px, 19vw, 76px);
   --text-display: clamp(34px, 9vw, 48px);
   --radius-xs: 4px;
   --radius-sm: 8px;
@@ -43,6 +46,22 @@
   --radius-sheet: 24px;
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  /* elevation: ink-tinted contact shadow plus a soft ambient one */
+  --border-soft: #0e1c2812;
+  --elevation-1: 0 1px 2px #0e1c280f, 0 4px 12px -4px #0e1c281f;
+  --elevation-2: 0 2px 4px #0e1c280f, 0 10px 24px -6px #0e1c2829;
+  --elevation-3: 0 4px 8px #0e1c2814, 0 24px 48px -12px #0e1c2847;
+  --elevation-hero:
+    inset 0 1px 0 #ffffff1a, 0 2px 4px #0e1c2814, 0 16px 32px -8px #0e1c284d;
+  /* hero material: a lit top edge, an LED dot grid that fades as it falls */
+  --hero-fill:
+    linear-gradient(180deg, transparent 25%, #09131ce0),
+    radial-gradient(#ffffff12 1px, transparent 1.5px) 0 0 / 9px 9px,
+    linear-gradient(160deg, #1c384d 0%, var(--board) 55%, #09131c 100%);
+  --button-amber: linear-gradient(180deg, #fabf4f, #f2b03a);
+  --elevation-button:
+    inset 0 1px 0 #ffffff73, 0 1px 2px #0e1c281a, 0 4px 10px -4px #7a4f0c59;
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -110,7 +129,16 @@ button {
   transition:
     transform 160ms var(--ease-out),
     background-color 150ms ease,
-    border-color 150ms ease;
+    border-color 150ms ease,
+    box-shadow 200ms var(--ease-out),
+    outline-offset 180ms var(--ease-out);
+}
+/* the focus ring contracts onto the control instead of blinking on */
+:where(button, a, summary, input, select, [tabindex]) {
+  outline-offset: 7px;
+}
+:where(a, summary, input, select) {
+  transition: outline-offset 180ms var(--ease-out);
 }
 button,
 input,
@@ -133,7 +161,8 @@ summary:focus-visible,
 }
 .detail-summary :focus-visible,
 .app-header :focus-visible,
-.arrival-step :focus-visible {
+.arrival-step :focus-visible,
+.next-class :focus-visible {
   outline-color: var(--accent);
 }
 h1,
@@ -307,8 +336,9 @@ time {
 .planner {
   padding: 8px 16px 16px;
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-soft);
   border-radius: var(--radius-xl);
+  box-shadow: var(--elevation-2);
 }
 .journey-fields {
   position: relative;
@@ -429,7 +459,8 @@ time {
   align-items: center;
   justify-content: center;
   gap: 12px;
-  background: var(--accent);
+  background: var(--button-amber);
+  box-shadow: var(--elevation-button);
   color: var(--ink);
   font-size: var(--text-field);
   font-weight: 700;
@@ -441,6 +472,7 @@ time {
 }
 .secondary-button {
   min-height: 48px;
+  box-shadow: var(--elevation-1);
   border: 1.5px solid var(--ink);
   padding: 10px 18px;
   border-radius: var(--radius-md);
@@ -502,10 +534,33 @@ time {
 .local-places h2 {
   font-size: var(--text-title);
 }
+.local-places ul,
+.preset-list {
+  overflow: hidden;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--elevation-1);
+}
 .local-places li {
   display: flex;
   align-items: center;
-  border-bottom: 1px solid var(--border);
+  padding-right: 4px;
+}
+.local-places li,
+.preset-list li {
+  position: relative;
+}
+/* dividers start after the icon tile, like a grouped list */
+.local-places li + li::before,
+.preset-list li + li::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 66px;
+  height: 1px;
+  background: var(--border);
 }
 .local-place {
   flex: 1;
@@ -513,7 +568,7 @@ time {
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 12px 0;
+  padding: 12px 8px 12px 14px;
   text-align: left;
   min-height: 72px;
 }
@@ -555,6 +610,7 @@ time {
 }
 .local-save[aria-pressed='true'] .icon,
 .is-saved .icon {
+  animation: pop 360ms var(--ease-out);
   fill: var(--accent);
   stroke: var(--ink);
 }
@@ -589,7 +645,7 @@ time {
 .preset-list li {
   display: flex;
   align-items: center;
-  border-bottom: 1px solid var(--border);
+  padding-right: 4px;
 }
 /* shortcuts read as ink tiles, unset ones as an outline to fill in */
 .preset-list .local-place > .icon:first-child {
@@ -615,18 +671,25 @@ time {
 .place-chip {
   min-height: 48px;
   padding: 10px 16px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-soft);
   border-radius: var(--radius-md);
-  background: var(--surface-quiet);
+  background: var(--surface);
+  box-shadow: var(--elevation-1);
   font-size: var(--text-body);
   font-weight: 600;
   transition:
     background-color 150ms ease,
     border-color 150ms ease,
-    transform 120ms var(--ease-out);
+    box-shadow 200ms var(--ease-out),
+    transform 160ms var(--ease-out),
+    outline-offset 180ms var(--ease-out);
 }
 .place-chip:active {
-  transform: scale(0.97);
+  transform: translateY(1px) scale(0.97);
+  box-shadow: none;
+}
+.primary-button:active {
+  box-shadow: inset 0 2px 4px #7a4f0c40;
 }
 
 /* class schedule */
@@ -634,7 +697,8 @@ time {
   margin-top: 28px;
 }
 .next-class {
-  background: var(--board);
+  background: var(--hero-fill);
+  box-shadow: var(--elevation-hero);
   color: var(--board-text);
   border-radius: var(--radius-xl);
   padding: 18px;
@@ -664,7 +728,7 @@ time {
 }
 .next-class-clock {
   font-family: var(--font-display);
-  font-size: var(--text-time);
+  font-size: var(--text-time-xl);
   font-weight: 700;
   line-height: 1;
   letter-spacing: -0.01em;
@@ -756,10 +820,27 @@ time {
 .class-list {
   margin-top: 12px;
   padding: 4px 16px 16px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-soft);
   border-radius: var(--radius-lg);
   background: var(--surface);
-  animation: rise 200ms var(--ease-out) both;
+  box-shadow: var(--elevation-1);
+}
+.collapse {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition:
+    grid-template-rows 320ms var(--ease-out),
+    opacity 200ms ease;
+}
+.collapse[data-open='true'] {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+.collapse > * {
+  min-height: 0;
+  overflow: clip;
+  overflow-clip-margin: 16px;
 }
 .class-list ul {
   list-style: none;
@@ -863,11 +944,13 @@ time {
 .leave-board {
   position: relative;
   margin-bottom: 28px;
-  padding: 14px 16px 16px;
+  padding: 14px 18px 18px;
   border-radius: var(--radius-xl);
-  background: var(--board);
+  background: var(--hero-fill);
+  box-shadow: var(--elevation-hero);
   color: var(--board-text);
-  animation: rise 320ms var(--ease-out) both;
+  transform-origin: 50% 0;
+  animation: settle 440ms var(--ease-drawer) both;
 }
 .leave-board h2 {
   font-size: inherit;
@@ -880,9 +963,9 @@ time {
   display: block;
   margin-top: 4px;
   font-family: var(--font-display);
-  font-size: var(--text-time-xl);
+  font-size: var(--text-time-hero);
   line-height: 1;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
   color: var(--accent);
   font-variant-numeric: tabular-nums;
 }
@@ -1018,16 +1101,49 @@ time {
   gap: 12px;
 }
 .route-list > * {
-  animation: rise 320ms var(--ease-out) both;
+  animation: card-in 380ms var(--ease-out) both;
 }
 .route-list > :nth-child(2) {
-  animation-delay: 45ms;
+  animation-delay: 50ms;
 }
 .route-list > :nth-child(3) {
-  animation-delay: 90ms;
+  animation-delay: 100ms;
 }
 .route-list > :nth-child(n + 4) {
   animation-delay: 135ms;
+}
+@keyframes pop {
+  40% {
+    transform: scale(1.3);
+  }
+}
+@keyframes card-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.985);
+  }
+}
+/* hero panels settle into place on the drawer curve */
+@keyframes settle {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.97);
+  }
+}
+/* a changed value rolls up into place */
+.tick {
+  display: inline-block;
+  animation: tick 320ms var(--ease-out) both;
+}
+.leave-time .tick {
+  animation-delay: 120ms;
+}
+@keyframes tick {
+  from {
+    opacity: 0;
+    transform: translateY(0.3em);
+    filter: blur(2px);
+  }
 }
 @keyframes rise {
   from {
@@ -1040,16 +1156,20 @@ time {
   text-align: left;
   width: 100%;
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-soft);
   border-radius: var(--radius-lg);
   padding: 16px 16px 12px;
+  box-shadow: var(--elevation-1);
 }
 .route-card.selected {
   border-color: var(--ink);
-  box-shadow: 0 0 0 1px var(--ink);
+  box-shadow:
+    0 0 0 1px var(--ink),
+    var(--elevation-2);
 }
 .route-card:active {
-  transform: scale(0.985);
+  transform: translateY(1px) scale(0.99);
+  box-shadow: 0 1px 2px #0e1c2814;
 }
 .route-topline {
   display: flex;
@@ -1104,6 +1224,47 @@ time {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   margin-top: 6px;
+}
+/* large times keep the digits big and set the meridiem small */
+.arrival-time .meridiem,
+.leave-time .meridiem,
+.next-class-clock .meridiem {
+  font-size: 0.42em;
+  letter-spacing: 0.02em;
+}
+/* the route line: rides in their color, walks as a thin thread */
+.journey-bar {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  height: 8px;
+  margin: 0 0 12px;
+}
+.journey-bar i {
+  flex-basis: 0;
+  min-width: 6px;
+  height: 4px;
+  border-radius: var(--radius-xs);
+  background: #7d879166;
+}
+.journey-bar .ride {
+  min-width: 18px;
+  height: 8px;
+  box-shadow: inset 0 0 0 1px #0e1c2814;
+}
+.leave-board .journey-bar,
+.detail-summary .journey-bar {
+  margin: 16px 0 14px;
+  animation: draw 640ms var(--ease-out) 140ms both;
+}
+.leave-board .journey-bar .walk,
+.detail-summary .journey-bar .walk {
+  background: #b4c4d280;
+}
+@keyframes draw {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
 }
 .route-sequence {
   display: flex;
@@ -1299,9 +1460,10 @@ time {
 }
 .state-message {
   padding: 20px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-soft);
   background: var(--surface);
   border-radius: var(--radius-lg);
+  box-shadow: var(--elevation-1);
 }
 .state-message > .state-icon {
   width: 48px;
@@ -1326,43 +1488,70 @@ time {
   color: var(--muted);
   font-size: var(--text-body);
 }
-.route-skeleton {
+.route-skeletons {
+  display: grid;
+  gap: 12px;
   margin-top: 16px;
-  padding: 20px;
+}
+.route-skeleton {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-soft);
   border-radius: var(--radius-lg);
+  box-shadow: var(--elevation-1);
+  animation: card-in 380ms var(--ease-out) both;
+}
+.route-skeleton:nth-child(2) {
+  animation-delay: 70ms;
+}
+.route-skeleton:nth-child(3) {
+  animation-delay: 140ms;
 }
 .route-skeleton i {
   display: block;
   height: 14px;
+  width: 72%;
   border-radius: var(--radius-xs);
-  background: linear-gradient(
-    100deg,
-    var(--surface-quiet) 30%,
-    #f6f7f3 50%,
-    var(--surface-quiet) 70%
-  );
-  background-size: 300% 100%;
-  animation: shimmer 1.3s linear infinite;
-  width: 68%;
-  margin-bottom: 18px;
+  background: var(--surface-quiet);
+  animation: breathe 1.4s ease-in-out infinite alternate;
 }
-@keyframes shimmer {
+.route-skeleton .sk-time {
+  height: 36px;
+  width: 40%;
+}
+.route-skeleton .sk-short {
+  width: 48%;
+}
+.route-skeleton .sk-line {
+  position: relative;
+  width: 100%;
+  height: 8px;
+  overflow: hidden;
+  animation: none;
+}
+.route-skeleton .sk-line::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  width: 35%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, transparent, #f5b53f99, transparent);
+  animation: travel 1.6s var(--ease-in-out) infinite;
+}
+@keyframes breathe {
+  to {
+    opacity: 0.55;
+  }
+}
+@keyframes travel {
   from {
-    background-position: 100% 0;
+    transform: translateX(-100%);
   }
   to {
-    background-position: 0 0;
+    transform: translateX(290%);
   }
-}
-.route-skeleton i:first-child {
-  height: 36px;
-  width: 42%;
-}
-.route-skeleton i:last-child {
-  margin: 0;
-  width: 80%;
 }
 
 /* detail: summary board */
@@ -1380,11 +1569,15 @@ time {
   margin-bottom: 8px;
 }
 .detail-summary {
-  background: var(--board);
+  background: var(--hero-fill);
+  box-shadow: var(--elevation-hero);
   color: var(--board-text);
   border-radius: var(--radius-xl);
   padding: 8px 16px 20px;
-  animation: rise 280ms var(--ease-out) both;
+  transform-origin: 50% 0;
+  animation: settle 440ms var(--ease-drawer) both;
+  /* the tapped route card morphs into this panel */
+  view-transition-name: trip;
 }
 .timeline > li {
   animation: rise 300ms var(--ease-out) both;
@@ -1449,7 +1642,8 @@ time {
   border-top: 1px solid var(--board-line);
 }
 .detail-summary .arrival-time {
-  font-size: var(--text-time-xl);
+  font-size: var(--text-time-hero);
+  letter-spacing: -0.02em;
   color: var(--accent);
   margin-top: 0;
 }
@@ -1496,8 +1690,9 @@ time {
 .map-panel {
   background: var(--surface);
   overflow: hidden;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-soft);
   border-radius: var(--radius-xl);
+  box-shadow: var(--elevation-1);
 }
 .map-heading {
   display: flex;
@@ -1513,10 +1708,22 @@ time {
 .map-heading .secondary {
   font-size: var(--text-secondary);
 }
-.map-canvas-wrap {
+/* a street grid, the river and a soft vignette under the points-only map */
+.map-canvas-wrap,
+.map-expansion-placeholder {
   position: relative;
   height: 320px;
-  background: #e4e9e2;
+  background:
+    radial-gradient(120% 90% at 50% 40%, transparent 55%, #0e1c2812),
+    radial-gradient(
+      ellipse 75% 60% at 0% 105%,
+      transparent 63%,
+      #1965991f 64% 68%,
+      transparent 69%
+    ),
+    repeating-linear-gradient(-35deg, #0e1c280d 0 1px, transparent 1px 34px),
+    repeating-linear-gradient(55deg, #0e1c280a 0 1px, transparent 1px 34px),
+    #e7ece4;
 }
 .map-canvas {
   width: 100%;
@@ -1538,13 +1745,13 @@ time {
   gap: 6px;
   background: var(--surface);
   color: var(--ink);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-soft);
   min-height: 48px;
   padding: 8px 14px;
   font-size: var(--text-secondary);
   font-weight: 600;
   border-radius: var(--radius-md);
-  box-shadow: 0 2px 8px #0e1c2824;
+  box-shadow: var(--elevation-3);
 }
 .map-button:active {
   transform: scale(0.97);
@@ -1555,13 +1762,20 @@ time {
 }
 .map-unavailable {
   position: absolute;
-  inset: 80px 24px 56px;
+  top: 50%;
+  left: 50%;
+  translate: -50% -50%;
+  width: min(300px, calc(100% - 48px));
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
   text-align: center;
-  gap: 12px;
+  gap: 10px;
+  padding: 20px;
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--elevation-3);
+  animation: rise 320ms var(--ease-out) both;
 }
 .map-unavailable > .icon {
   width: 28px;
@@ -1584,9 +1798,11 @@ time {
   width: fit-content;
   max-width: calc(100% - 32px);
   background: var(--surface);
-  padding: 7px 10px;
-  border-radius: var(--radius-sm);
+  padding: 7px 12px;
+  border-radius: var(--radius-md);
+  box-shadow: var(--elevation-3);
   font-size: var(--text-label);
+  font-weight: 600;
   color: var(--muted);
 }
 .map-legend {
@@ -1647,11 +1863,10 @@ time {
   border-radius: var(--radius-sm);
 }
 .map-expansion-placeholder {
-  height: 320px;
   display: grid;
   place-items: center;
-  background: var(--surface-quiet);
   color: var(--muted);
+  font-weight: 600;
 }
 
 /* timeline */
@@ -1714,9 +1929,17 @@ time {
   height: 18px;
 }
 .ride-dot {
-  background: var(--ink);
-  color: #fff;
+  background: var(--route, var(--ink));
+  border-color: var(--route, var(--ink));
+  color: var(--route-text, #fff);
   border-radius: var(--radius-sm);
+  box-shadow: var(--elevation-1);
+}
+/* a ride's rail carries its line color, so routes read apart at a glance */
+.ride-step::before {
+  width: 4px;
+  left: 14.5px;
+  background: var(--route, var(--ink));
 }
 .step-heading {
   display: flex;
@@ -1824,7 +2047,8 @@ time {
   border-radius: 50%;
 }
 .arrival-step .step-content {
-  background: var(--board);
+  background: var(--hero-fill);
+  box-shadow: var(--elevation-hero);
   color: var(--board-text);
   border-radius: var(--radius-lg);
   padding: 14px 16px;
@@ -1850,12 +2074,48 @@ time {
 .app-footer details {
   margin-top: 8px;
 }
-.app-footer summary {
+.app-footer summary,
+.overnight-help summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   min-height: 48px;
-  display: list-item;
-  align-content: center;
   width: fit-content;
   font-weight: 600;
+  list-style: none;
+}
+.app-footer summary::-webkit-details-marker,
+.overnight-help summary::-webkit-details-marker {
+  display: none;
+}
+.app-footer summary::before,
+.overnight-help summary::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  margin: 0 2px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform 220ms var(--ease-out);
+}
+details[open] > summary::before {
+  transform: rotate(45deg);
+}
+.app-footer details::details-content,
+.overnight-help::details-content {
+  block-size: 0;
+  overflow: clip;
+  opacity: 0;
+  transition:
+    block-size 300ms var(--ease-out),
+    opacity 220ms ease,
+    content-visibility 300ms allow-discrete;
+}
+.app-footer details[open]::details-content,
+.overnight-help[open]::details-content {
+  block-size: auto;
+  opacity: 1;
 }
 .app-footer details p {
   max-width: 480px;
@@ -1877,7 +2137,9 @@ time {
   max-width: 600px;
   max-height: 94dvh;
   margin: auto auto 0;
-  box-shadow: 0 -12px 48px #0e1c2833;
+  box-shadow:
+    0 -4px 8px #0e1c2814,
+    0 -24px 48px -12px #0e1c2847;
   overflow-y: auto;
   overscroll-behavior: contain;
   opacity: 1;
@@ -2028,6 +2290,33 @@ time {
   padding: 8px 0;
   border-bottom: 1px solid var(--border);
 }
+.radio-row input {
+  appearance: none;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  border: 2px solid var(--field);
+  border-radius: 50%;
+  background: var(--surface);
+  transition:
+    border-color 150ms ease,
+    outline-offset 180ms var(--ease-out);
+}
+.radio-row input::before {
+  content: '';
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--ink);
+  transform: scale(0);
+  transition: transform 200ms var(--ease-out);
+}
+.radio-row input:checked {
+  border-color: var(--ink);
+}
+.radio-row input:checked::before {
+  transform: scale(1);
+}
 .date-fields {
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
@@ -2077,11 +2366,6 @@ time {
   margin: 16px 0 24px;
   font-size: var(--text-secondary);
   color: var(--muted);
-}
-.overnight-help summary {
-  min-height: 48px;
-  align-content: center;
-  font-weight: 600;
 }
 .overnight-help p {
   margin-bottom: 8px;
@@ -2223,8 +2507,8 @@ time {
     background-color: #dfe3db;
   }
   .place-chip:hover {
-    background-color: #dfe3db;
-    border-color: var(--field);
+    transform: translateY(-1px);
+    box-shadow: var(--elevation-2);
   }
   .import-zone:hover {
     border-color: var(--ink);
@@ -2237,7 +2521,13 @@ time {
     background-color: var(--board-2);
   }
   .route-card:hover {
-    border-color: var(--ink);
+    transform: translateY(-2px);
+    box-shadow: var(--elevation-2);
+  }
+  .route-card.selected:hover {
+    box-shadow:
+      0 0 0 1px var(--ink),
+      var(--elevation-3);
   }
   .route-card:hover .route-open .icon,
   .primary-button:hover .icon {
@@ -2248,7 +2538,11 @@ time {
     transform: translateX(3px);
   }
   .primary-button:hover {
-    background-color: #ffc455;
+    filter: brightness(1.04);
+    box-shadow:
+      inset 0 1px 0 #ffffff73,
+      0 2px 4px #0e1c281a,
+      0 8px 16px -6px #7a4f0c66;
   }
   .search-results li:hover {
     background: var(--accent-soft);
@@ -2395,6 +2689,20 @@ time {
     margin-bottom: 4px;
   }
 }
+::view-transition-group(trip) {
+  animation-duration: 420ms;
+  animation-timing-function: var(--ease-drawer);
+}
+::view-transition-old(trip),
+::view-transition-new(trip) {
+  height: 100%;
+  object-fit: cover;
+  object-position: top;
+}
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 220ms;
+}
 /* reduced motion keeps fades and color changes and drops movement */
 @media (prefers-reduced-motion: reduce) {
   *,
@@ -2409,7 +2717,31 @@ time {
       opacity: 0;
     }
   }
-  .route-skeleton i {
+  @keyframes card-in {
+    from {
+      opacity: 0;
+    }
+  }
+  @keyframes settle {
+    from {
+      opacity: 0;
+    }
+  }
+  @keyframes tick {
+    from {
+      opacity: 0;
+    }
+  }
+  @keyframes draw {
+    from {
+      opacity: 0;
+    }
+  }
+  .route-skeleton i,
+  .route-skeleton .sk-line::after {
+    animation: none;
+  }
+  ::view-transition-group(*) {
     animation: none;
   }
   :active,

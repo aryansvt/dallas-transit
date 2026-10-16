@@ -13,7 +13,7 @@ import {
 } from '../lib/local-places';
 import { worstTransfer } from '../lib/presentation';
 import { displayDate, duration, serviceTime } from '../lib/time';
-import { JourneyTime, RouteSequence, TransferTag } from './journey';
+import { JourneyBar, JourneyTime, RouteSequence, TransferTag } from './journey';
 import { Icon } from './icon';
 
 export function JourneySummary({
@@ -96,6 +96,7 @@ export function JourneySummary({
           <span className="secondary">Total trip</span>
         </div>
       </div>
+      <JourneyBar journey={journey} references={references} />
       <p className="summary-metrics">
         {arriveBy && (
           <>
