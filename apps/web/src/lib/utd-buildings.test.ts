@@ -21,6 +21,8 @@ describe('matchBuilding', () => {
     ['SPN2 11.213', 'SP2', '11.213'],
     ['SOM 4.409', 'JSOM', '4.409'],
     ['APC1 1.309', 'APC', '1.309'],
+    ['TI-BMES 2.102', 'TI-BMES', '2.102'],
+    ['ECSW-1.315', 'ECSW', '1.315'],
   ])('reads %s as a building and room', (location, code, room) => {
     expect(match(location)).toEqual({ code, room });
   });

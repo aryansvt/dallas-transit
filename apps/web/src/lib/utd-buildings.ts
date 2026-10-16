@@ -364,8 +364,9 @@ export function matchBuilding(
   location: string,
 ): { building: UtdBuilding; room?: string } | null {
   const text = location.toUpperCase().replace(/\s+/g, ' ').trim();
+  // codes may be hyphenated, as in TI-BMES 2.102
   for (const m of text.matchAll(
-    /\b([A-Z]{2,5}\d?)\s*-?\s*(\d{1,2}\.\d{1,4}[A-Z]?)(?![\d.])/g,
+    /\b([A-Z]{2,5}(?:-[A-Z]{2,5})?\d?)\s*-?\s*(\d{1,2}\.\d{1,4}[A-Z]?)(?![\d.])/g,
   )) {
     const building = byCode.get(m[1]!);
     if (building) return { building, room: m[2]! };
