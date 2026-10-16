@@ -20,4 +20,8 @@ export interface PreviewSetup {
   departure?: Departure;
   /** A fixed clock, ISO, so class-dependent screens repeat. */
   now?: string;
+  /** Run that clock a minute every 1.5 s, to review values that change. */
+  fastClock?: boolean;
+  /** Render the map without a street style, as when none is configured. */
+  noMap?: boolean;
 }

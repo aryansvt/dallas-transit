@@ -414,3 +414,76 @@ it('renders measured interchange walking and explains a same-route vehicle chang
     'Tight transfer5 min to connect',
   );
 });
+it('draws each leg on the route line in its line color, with times set apart', async () => {
+  await render('transfer');
+  const bar = container.querySelector('.detail-summary .journey-bar')!;
+  expect(bar.getAttribute('aria-hidden')).toBe('true');
+  const segments = [...bar.querySelectorAll('i')];
+  expect(segments.map((s) => s.className)).toEqual([
+    'walk',
+    'ride',
+    'ride',
+    'walk',
+  ]);
+  expect(segments[1]!.getAttribute('style')).toMatch(/c63532|198, 53, 50/i);
+  expect(segments[2]!.getAttribute('style')).toMatch(/196599|25, 101, 153/i);
+  // rides take their share of the trip; the meridiem is its own span
+  expect(Number(segments[1]!.style.flexGrow)).toBe(540);
+  const arrival = container.querySelector('.detail-summary .arrival-time')!;
+  expect(arrival.textContent).toBe('8:32 AM');
+  expect(arrival.querySelector('.meridiem')?.textContent).toBe(' AM');
+  // the timeline rail and dot carry the same line color
+  const ride = container.querySelector<HTMLElement>('.ride-step')!;
+  expect(ride.style.getPropertyValue('--route')).toMatch(/c63532/i);
+});
+it('morphs the tapped card into the trip summary when the browser can', async () => {
+  const names: string[] = [];
+  const start = vi.fn((update: () => void) => {
+    names.push(
+      [...container.querySelectorAll<HTMLElement>('.route-card')]
+        .map((c) => c.style.viewTransitionName)
+        .join('|'),
+    );
+    update();
+    return { finished: Promise.resolve() };
+  });
+  Object.defineProperty(document, 'startViewTransition', {
+    configurable: true,
+    value: start,
+  });
+  try {
+    await render('results');
+    await click(
+      container.querySelectorAll<HTMLButtonElement>('.route-card')[1]!,
+    );
+    expect(start).toHaveBeenCalledTimes(1);
+    // only the tapped card carries the shared name into the transition
+    expect(names[0]).toBe('|trip|');
+    expect(container.querySelector('.timeline')).not.toBeNull();
+    await click(button('All route options'));
+    expect(start).toHaveBeenCalledTimes(2);
+    expect(container.querySelector('.timeline')).toBeNull();
+    await tick(0);
+    // names are cleared once each transition finishes
+    expect(
+      [...container.querySelectorAll<HTMLElement>('.route-card')].every(
+        (c) => !c.style.viewTransitionName,
+      ),
+    ).toBe(true);
+  } finally {
+    Reflect.deleteProperty(document, 'startViewTransition');
+  }
+});
+it('rolls the countdown to each new minute as a fresh value', async () => {
+  await render('arrive-ticking');
+  const first = container.querySelector('.leave-when .tick')!;
+  expect(first.textContent).toBe('in 26 min');
+  await tick(1500);
+  const next = container.querySelector('.leave-when .tick')!;
+  expect(next.textContent).toBe('in 25 min');
+  // re-keyed, so the new value animates in instead of swapping text
+  expect(next).not.toBe(first);
+  expect(container.querySelector('.leave-board h2')?.textContent).toBe(
+    'Leave by 8:14 AM',
+  );
+});

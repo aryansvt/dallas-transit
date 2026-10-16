@@ -167,6 +167,18 @@ it('does not let insight suggest leaving during a class under way', async () => 
   });
 });
 
+it('keeps the schedule list mounted but inert until it expands', async () => {
+  await render('classes');
+  const expander = container.querySelector<HTMLElement>('.expander')!;
+  const list = expander.querySelector('.class-list')!;
+  expect(expander.dataset.open).toBe('false');
+  expect(list.hasAttribute('inert')).toBe(true);
+  await click(button('Schedule'));
+  expect(button('Schedule').getAttribute('aria-expanded')).toBe('true');
+  expect(expander.dataset.open).toBe('true');
+  expect(list.hasAttribute('inert')).toBe(false);
+});
+
 it('sets Home from student places and uses it as a one-tap destination', async () => {
   await render('student-new');
   await click(button('Set Home'));

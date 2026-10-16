@@ -135,7 +135,8 @@ function MapCanvas({
                     {
                       id: 'canvas',
                       type: 'background',
-                      paint: { 'background-color': '#e9ede7' },
+                      // transparent so the schematic backdrop shows through
+                      paint: { 'background-color': 'rgba(0,0,0,0)' },
                     },
                   ],
                 }

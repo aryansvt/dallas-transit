@@ -1,4 +1,4 @@
-import { Fragment } from 'react';
+import { Fragment, type CSSProperties, type ReactNode } from 'react';
 import type {
   GeographicJourney,
   References,
@@ -19,6 +19,36 @@ import { duration, serviceTime } from '../lib/time';
 import { Icon } from './icon';
 import { LiveTiming } from './live-journey';
 import { liveClient, type TransitClient } from '../lib/api';
+/** Re-keyed on every new value so the change rolls in, while screen readers
+ * still meet one plain string. */
+export function Tick({
+  value,
+  children,
+}: {
+  value: string | number;
+  children: ReactNode;
+}) {
+  return (
+    <span className="tick" key={value}>
+      {children}
+    </span>
+  );
+}
+/** "8:14 AM" with the meridiem in its own span, so large times can set it
+ * small; the text reads the same. */
+export function Clock({ text }: { text: string }) {
+  const [, digits, gap, meridiem] = /^(.*?)(\s)(AM|PM)$/.exec(text) ?? [];
+  if (!meridiem) return text;
+  return (
+    <>
+      {digits}
+      <span className="meridiem">
+        {gap}
+        {meridiem}
+      </span>
+    </>
+  );
+}
 export function JourneyTime({
   date,
   seconds,
@@ -29,9 +59,39 @@ export function JourneyTime({
   const t = serviceTime(date, seconds);
   return (
     <time dateTime={t.iso}>
-      {t.clock}
+      <Clock text={t.clock} />
       {t.dayLabel && <span className="day-label">{t.dayLabel}</span>}
     </time>
+  );
+}
+/** Each leg as its share of the trip: rides in their line color, walks as a
+ * thin gray thread. Decorative; the badges and steps name every route. */
+export function JourneyBar({
+  journey,
+  references,
+}: {
+  journey: GeographicJourney;
+  references: References;
+}) {
+  return (
+    <span className="journey-bar" aria-hidden="true">
+      {journey.legs.map((leg, i) => (
+        <i
+          key={i}
+          className={leg.kind === 'transit' ? 'ride' : 'walk'}
+          style={{
+            flexGrow: Math.max(leg.arrivalTime - leg.departureTime, 1),
+            ...(leg.kind === 'transit'
+              ? {
+                  background: routeColors(
+                    references.routes.find((r) => r.routeId === leg.routeId),
+                  ).backgroundColor,
+                }
+              : {}),
+          }}
+        />
+      ))}
+    </span>
   );
 }
 export function RouteBadge({ route }: { route: RouteDetails | undefined }) {
@@ -169,19 +229,25 @@ export function RouteCard({
           {label && <span className="route-distinction">{label}</span>}
         </span>
       </span>
+      <JourneyBar journey={journey} references={references} />
       <RouteSequence journey={journey} references={references} />
       <span className="route-metrics">
         {arriveBy && (
           <>
-            Arrive {serviceTime(journey.serviceDate, journey.arrivalTime).clock}
+            <span>
+              Arrive{' '}
+              {serviceTime(journey.serviceDate, journey.arrivalTime).clock}
+            </span>
             <span aria-hidden="true"> · </span>
           </>
         )}
-        {journey.transferCount === 0
-          ? 'No transfers'
-          : `${journey.transferCount} transfer${journey.transferCount === 1 ? '' : 's'}`}
+        <span>
+          {journey.transferCount === 0
+            ? 'No transfers'
+            : `${journey.transferCount} transfer${journey.transferCount === 1 ? '' : 's'}`}
+        </span>
         <span aria-hidden="true"> · </span>
-        {duration(journey.walkingDurationSeconds)} walking
+        <span>{duration(journey.walkingDurationSeconds)} walking</span>
       </span>
       {first && (
         <span className="boarding-context">
@@ -310,6 +376,7 @@ export function Timeline({
             (s) => s.stopId === leg.boardingStopId,
           );
           const count = leg.alightingOccurrence - leg.boardingOccurrence;
+          const colors = routeColors(route);
           return (
             <Fragment key={i}>
               {transferring && journey.legs[i - 1]?.kind !== 'transfer' && (
@@ -328,7 +395,16 @@ export function Timeline({
                   </div>
                 </li>
               )}
-              <li className="timeline-step ride-step">
+              <li
+                className="timeline-step ride-step"
+                // the rail and dot take the line's color
+                style={
+                  {
+                    '--route': colors.backgroundColor,
+                    '--route-text': colors.color,
+                  } as CSSProperties
+                }
+              >
                 <span className="timeline-dot ride-dot">
                   <Icon
                     name={

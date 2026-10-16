@@ -286,6 +286,8 @@ export const scenarios = {
   'transfers-detail': '23 · Two transfers, step by step',
   'insight-later': '24 · Insight, no need to rush',
   'arrive-worst': '25 · Arrive-by, worst-case data',
+  'arrive-ticking': '26 · Arrive-by, clock running',
+  'map-unavailable': '27 · Trip detail, no street map',
 } as const;
 export type Scenario = keyof typeof scenarios;
 // a fall 2026 timetable; one building has no official entrance yet
@@ -476,6 +478,16 @@ export function previewSetup(scenario: Scenario): PreviewSetup {
   // Friday 7:48 AM: the latest option leaves at 8:14
   if (scenario === 'arrive-by')
     return { ...setup, now: '2026-09-18T12:48:00Z', data: arriveByResponse() };
+  // a minute passes every 1.5 s so the countdown visibly rolls
+  if (scenario === 'arrive-ticking')
+    return {
+      ...setup,
+      now: '2026-09-18T12:48:00Z',
+      fastClock: true,
+      data: arriveByResponse(),
+    };
+  if (scenario === 'map-unavailable')
+    return { ...setup, data: response, detail: 0, noMap: true };
   if (scenario === 'arrive-late')
     return { ...setup, now: '2026-09-18T13:20:00Z', data: arriveByResponse() };
   // in CS 3345 until 11:15; getting to an 11:30 class means leaving at 10:44

@@ -23,6 +23,7 @@ import {
 } from '../lib/time';
 import { matchBuilding } from '../lib/utd-buildings';
 import { Icon } from './icon';
+import { Clock } from './journey';
 
 const skippedNouns: Record<SkipReason, [string, string]> = {
   'all-day': ['all-day event', 'all-day events'],
@@ -234,7 +235,9 @@ export function ClassSchedule({
         {next ? (
           <>
             <p className="next-class-time">
-              <span className="next-class-clock">{clockTime(next.start)}</span>
+              <span className="next-class-clock">
+                <Clock text={clockTime(next.start)} />
+              </span>
               <span>{dayLabel(next.start, now)}</span>
             </p>
             <p className="next-class-title">{next.series.title}</p>
@@ -242,10 +245,16 @@ export function ClassSchedule({
             <p className="next-class-room">{placeStatus(next.series, false)}</p>
             {destination && 'place' in destination ? (
               <button className="primary-button" onClick={() => onPlan(next)}>
-                Plan trip to arrive{' '}
-                {clockTime(
-                  new Date(next.start.getTime() - CLASS_BUFFER_MINUTES * 60000),
-                )}
+                <span>
+                  Plan trip to arrive{' '}
+                  <time>
+                    {clockTime(
+                      new Date(
+                        next.start.getTime() - CLASS_BUFFER_MINUTES * 60000,
+                      ),
+                    )}
+                  </time>
+                </span>
                 <Icon name="arrow" />
               </button>
             ) : (
@@ -272,33 +281,37 @@ export function ClassSchedule({
           <p className="next-class-note">No classes in the next two weeks.</p>
         )}
       </div>
-      {open && (
-        <div className="class-list" id={listId}>
-          <ul>
-            {classes.map((c) => (
-              <li key={c.id}>
-                <strong>{c.title}</strong>
-                <span className="secondary">{meets(c)}</span>
-                <span className="secondary">{placeStatus(c)}</span>
-              </li>
-            ))}
-          </ul>
-          <div className="class-actions">
-            <ScheduleFile
-              className="secondary-button"
-              onFile={(f) => void read(f)}
-            >
-              Replace schedule
-            </ScheduleFile>
-            <button className="text-button" onClick={onRemove}>
-              Remove schedule
-            </button>
+      {/* stays mounted so it can expand and collapse; inert while closed */}
+      <div className="expander" data-open={open}>
+        <div>
+          <div className="class-list" id={listId} inert={!open}>
+            <ul>
+              {classes.map((c) => (
+                <li key={c.id}>
+                  <strong>{c.title}</strong>
+                  <span className="secondary">{meets(c)}</span>
+                  <span className="secondary">{placeStatus(c)}</span>
+                </li>
+              ))}
+            </ul>
+            <div className="class-actions">
+              <ScheduleFile
+                className="secondary-button"
+                onFile={(f) => void read(f)}
+              >
+                Replace schedule
+              </ScheduleFile>
+              <button className="text-button" onClick={onRemove}>
+                Remove schedule
+              </button>
+            </div>
+            <p className="local-note">
+              Classes are stored only on this device. The file itself is not
+              kept.
+            </p>
           </div>
-          <p className="local-note">
-            Classes are stored only on this device. The file itself is not kept.
-          </p>
         </div>
-      )}
+      </div>
     </section>
   );
 }
