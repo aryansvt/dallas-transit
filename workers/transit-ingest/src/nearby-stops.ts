@@ -1,5 +1,6 @@
 import { performance } from 'node:perf_hooks';
 import {
+  departureWindow,
   geographicPolicy,
   validateGeographicRequest,
   type Coordinate,
@@ -221,7 +222,7 @@ export function postgisCandidateSource(
               policy.shortlistLimit ?? 32,
             ),
             request.serviceDate,
-            request.departureTime,
+            departureWindow(request, policy).earliest,
             access,
             policy.radiusMeters,
           ]);

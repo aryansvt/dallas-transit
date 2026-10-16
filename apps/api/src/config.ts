@@ -15,8 +15,11 @@ export const API_POLICY = geographicPolicy({
   providerTimeoutMs: 3000,
   maxTransitSearches: 36,
   maxJourneys: 3,
+  arriveByWindowSeconds: 7200,
+  maxWindowDepartures: 4,
 });
 export const MAX_TRANSFERS = 3;
+export const MAX_ARRIVAL_BUFFER_MINUTES = 60;
 
 /** Only static, non-secret messages from configuration validation may be logged. */
 export class ServerConfigurationError extends Error {}

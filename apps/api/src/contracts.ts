@@ -4,7 +4,7 @@ import {
   validateCoordinate,
 } from '@dallas-transit/router';
 import { parseGtfsDate } from '@dallas-transit/gtfs';
-import { MAX_TRANSFERS } from './config.js';
+import { MAX_ARRIVAL_BUFFER_MINUTES, MAX_TRANSFERS } from './config.js';
 import { ApiError } from './errors.js';
 
 const string = { type: 'string' } as const;
@@ -17,19 +17,34 @@ export const object = (
   required = Object.keys(properties),
 ) => ({ type: 'object', additionalProperties: false, properties, required });
 export const coordinateSchema = object({ latitude: number, longitude: number });
-export const journeyRequestSchema = object(
-  {
-    origin: coordinateSchema,
-    destination: coordinateSchema,
-    serviceDate: { type: 'string', minLength: 10, maxLength: 10 },
-    departureTime: integer,
-    maxTransfers: { ...integer, maximum: MAX_TRANSFERS },
-  },
-  ['origin', 'destination', 'serviceDate', 'departureTime'],
-);
+export const journeyRequestSchema = {
+  ...object(
+    {
+      origin: coordinateSchema,
+      destination: coordinateSchema,
+      serviceDate: { type: 'string', minLength: 10, maxLength: 10 },
+      departureTime: integer,
+      arrivalTime: integer,
+      arrivalBufferMinutes: { ...integer, maximum: MAX_ARRIVAL_BUFFER_MINUTES },
+      maxTransfers: { ...integer, maximum: MAX_TRANSFERS },
+    },
+    ['origin', 'destination', 'serviceDate'],
+  ),
+  // exactly one time mode; a buffer only means something when arriving by
+  oneOf: [{ required: ['departureTime'] }, { required: ['arrivalTime'] }],
+  dependencies: { arrivalBufferMinutes: ['arrivalTime'] },
+};
 export function journeyRequest(value: unknown): GeographicRequest {
   try {
-    const request = value as GeographicRequest;
+    const { arrivalBufferMinutes, ...body } = value as GeographicRequest & {
+      arrivalBufferMinutes?: number;
+    };
+    // the router counts seconds; the wire contract counts minutes
+    const request = (
+      arrivalBufferMinutes === undefined
+        ? body
+        : { ...body, arrivalBufferSeconds: arrivalBufferMinutes * 60 }
+    ) as GeographicRequest;
     validateGeographicRequest(request);
     if ((request.maxTransfers ?? MAX_TRANSFERS) > MAX_TRANSFERS)
       throw new Error();
@@ -169,15 +184,19 @@ export const journeySchema = object(
   journeyProperties,
   Object.keys(journeyProperties).filter((k) => k !== 'scheduledTransferRisk'),
 );
-const context = {
+const base = {
   publicationId: string,
   serviceDate: string,
   origin: coordinateSchema,
   destination: coordinateSchema,
-  requestedDepartureTime: number,
 };
+// depart-at keeps its exact V1 context; arrive-by echoes the deadline instead
+const contexts = [
+  { ...base, requestedDepartureTime: number },
+  { ...base, requestedArrivalTime: number, arrivalBufferMinutes: integer },
+];
 export const journeyResponseSchema = {
-  anyOf: [
+  anyOf: contexts.flatMap((context) => [
     object(
       {
         ...context,
@@ -214,7 +233,7 @@ export const journeyResponseSchema = {
         ],
       },
     }),
-  ],
+  ]),
 };
 export const errorSchema = object({
   error: object({

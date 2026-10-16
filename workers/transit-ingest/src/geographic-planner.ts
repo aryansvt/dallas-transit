@@ -26,6 +26,8 @@ export interface PlanningMetrics {
   providerBatchMs: number;
   providerCallMs: number[];
   transitSearches: number;
+  /** Arrive-by only: forward window runs across access stops. */
+  windowDepartures?: number;
   compositionMs: number;
   totalMs: number;
 }
@@ -362,6 +364,8 @@ export async function planGeographicJourney(
     progress();
     signal?.throwIfAborted();
     metrics.transitSearches = result.transitSearches;
+    if (result.windowDepartures !== undefined)
+      metrics.windowDepartures = result.windowDepartures;
     // Failed candidates might have supplied the missing transit connection.
     if (
       result.status === 'no-journey' &&

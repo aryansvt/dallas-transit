@@ -34,13 +34,16 @@ export interface References {
   routes: RouteDetails[];
   trips: TripDetails[];
 }
-export interface JourneyContext {
+/** Depart-at echoes the requested departure; arrive-by echoes the deadline. */
+export type JourneyContext = {
   publicationId: string;
   serviceDate: string;
   origin: Coordinate;
   destination: Coordinate;
-  requestedDepartureTime: number;
-}
+} & (
+  | { requestedDepartureTime: number }
+  | { requestedArrivalTime: number; arrivalBufferMinutes: number }
+);
 export type NoJourneyReason =
   | 'no-nearby-access-stops'
   | 'no-nearby-egress-stops'
