@@ -3,11 +3,16 @@ import {
   buildSchedule,
   latestDepartures,
   routeToStops,
+  routeWindow,
+  type Journey,
+  type RoutingResult,
   type RoutingSchedule,
+  type WindowRequest,
 } from './index.js';
 import {
   day,
   input,
+  network as threeRides,
   randomSchedule,
   seededRandom,
   trip,
@@ -106,26 +111,8 @@ describe('reverse latest-departure pass', () => {
   });
 
   it('matches the forward engine on 160 seeded networks', () => {
-    const random = seededRandom(271828);
-    for (let fixture = 0; fixture < 160; fixture++) {
-      const base = randomSchedule(random);
-      // larger allowances than the oracle's so missed connections are common
-      const schedule = buildSchedule({
-        ...base,
-        stops: base.stops.map((s) => ({ ...s, changeSeconds: random(30) })),
-      });
-      const instants = [
-        ...new Set(
-          schedule.trips.flatMap((t) =>
-            t.events
-              .filter(
-                (e) =>
-                  e.stopId === 'A' && e.pickup === 0 && e.departure !== null,
-              )
-              .map((e) => e.departure!),
-          ),
-        ),
-      ];
+    for (const [fixture, schedule] of seededNetworks()) {
+      const instants = departureInstants(schedule);
       for (const [deadline, earliestDeparture] of [
         [180, 0],
         [220, 0],
@@ -138,8 +125,8 @@ describe('reverse latest-departure pass', () => {
         const expected: (number | null)[] = [null, null, null];
         for (const departureTime of instants.filter(
           (t) => t >= earliestDeparture,
-        )) {
-          const results = routeToStops(
+        ))
+          for (const [stop, result] of routeToStops(
             schedule,
             {
               serviceDate: day,
@@ -148,15 +135,10 @@ describe('reverse latest-departure pass', () => {
               maxTransfers: 2,
             },
             ['C', 'D'],
-          );
-          for (const [stop, result] of results) {
+          )) {
             if (result.status !== 'ok') continue;
             for (const j of result.journeys) {
-              if (
-                !j.legs.length ||
-                j.arrivalTime > deadlines[stop as 'C' | 'D']
-              )
-                continue;
+              if (j.arrivalTime > deadlines[stop as 'C' | 'D']) continue;
               for (let k = j.boardingCount - 1; k < 3; k++)
                 expected[k] = Math.max(
                   expected[k] ?? -1,
@@ -164,7 +146,6 @@ describe('reverse latest-departure pass', () => {
                 );
             }
           }
-        }
         expect(
           latestDepartures(schedule, {
             serviceDate: day,
@@ -182,3 +163,189 @@ describe('reverse latest-departure pass', () => {
     }
   });
 });
+
+const window = (
+  schedule: RoutingSchedule,
+  departureTimes: readonly number[],
+  overrides: Partial<WindowRequest> = {},
+  destinations = ['D'],
+) =>
+  routeWindow(
+    schedule,
+    { serviceDate: day, originStopId: 'A', departureTimes, ...overrides },
+    destinations,
+  );
+const okJourneys = (result: RoutingResult | undefined) => {
+  if (result?.status !== 'ok') throw new Error(JSON.stringify(result));
+  return result.journeys;
+};
+const metrics = (journeys: readonly Journey[]) =>
+  [
+    ...new Set(
+      journeys.map((j) =>
+        JSON.stringify([
+          j.requestedDepartureTime,
+          j.arrivalTime,
+          j.boardingCount,
+          j.walkingDurationSeconds,
+          j.scheduledTransferRisk,
+        ]),
+      ),
+    ),
+  ].sort();
+
+describe('range RAPTOR departure window', () => {
+  it('finds the same journeys as a depart-at search for one departure', () => {
+    const schedule = threeRides();
+    const departAt = routeToStops(
+      schedule,
+      { serviceDate: day, originStopId: 'A', departureTime: 100 },
+      ['D'],
+    ).get('D');
+    expect(window(schedule, [100]).get('D')).toEqual(departAt);
+  });
+
+  it('uses each journey first boarding as its departure, not the scanned instant', () => {
+    const schedule = buildSchedule(
+      input([
+        trip('early', ['A', 'D'], [100, 200]),
+        trip('late', ['A', 'D'], [150, 260]),
+      ]),
+    );
+    expect(
+      okJourneys(window(schedule, [90, 150]).get('D')).map((j) => [
+        j.requestedDepartureTime,
+        j.arrivalTime,
+        j.durationSeconds,
+      ]),
+    ).toEqual([
+      [150, 260, 110],
+      [100, 200, 100],
+    ]);
+  });
+
+  it('keeps an arrival exactly at the deadline and drops later ones', () => {
+    const arrivals = (deadline: number) =>
+      okJourneys(
+        window(threeRides(), [100], { arrivalDeadline: deadline }).get('D'),
+      ).map((j) => j.arrivalTime);
+    expect(arrivals(300)).toEqual([250, 300]);
+    expect(arrivals(299)).toEqual([250]);
+    expect(
+      window(threeRides(), [100], { arrivalDeadline: 249 }).get('D'),
+    ).toEqual({ status: 'no-journey', reason: 'unreachable' });
+  });
+
+  it('rejects empty, oversized and invalid departure sets', () => {
+    const schedule = threeRides();
+    expect(() => window(schedule, [])).toThrow(RangeError);
+    expect(() =>
+      window(
+        schedule,
+        Array.from({ length: 65 }, (_, i) => i),
+      ),
+    ).toThrow(RangeError);
+    expect(() => window(schedule, [1.5])).toThrow(RangeError);
+    expect(() => window(schedule, [100], { arrivalDeadline: NaN })).toThrow(
+      RangeError,
+    );
+  });
+
+  it('equals the Pareto profile of independent depart-at runs on 160 seeded networks', () => {
+    for (const [fixture, schedule] of seededNetworks(314159)) {
+      const instants = departureInstants(schedule);
+      if (!instants.length) continue;
+      for (const deadline of [Infinity, 260]) {
+        const independent = instants.flatMap((departureTime) =>
+          [
+            ...routeToStops(
+              schedule,
+              {
+                serviceDate: day,
+                originStopId: 'A',
+                departureTime,
+                maxTransfers: 2,
+              },
+              ['C', 'D'],
+            ).values(),
+          ].flatMap((r) =>
+            r.status === 'ok'
+              ? r.journeys
+                  .filter((j) => j.arrivalTime <= deadline)
+                  .map((j) => ({
+                    ...j,
+                    requestedDepartureTime: j.legs[0]!.departureTime,
+                  }))
+              : [],
+          ),
+        );
+        const results = window(
+          schedule,
+          instants,
+          {
+            maxTransfers: 2,
+            ...(deadline === Infinity ? {} : { arrivalDeadline: deadline }),
+          },
+          ['C', 'D'],
+        );
+        for (const stop of ['C', 'D']) {
+          const result = results.get(stop)!;
+          expect(
+            result.status === 'ok' ? metrics(result.journeys) : [],
+            `fixture ${fixture}, ${stop}, deadline ${deadline}`,
+          ).toEqual(
+            metrics(
+              profile(independent.filter((j) => j.destinationStopId === stop)),
+            ),
+          );
+        }
+      }
+    }
+  });
+});
+
+/** Later departure, earlier arrival, fewer rides, less walking, lower risk. */
+function profile(journeys: readonly Journey[]) {
+  const key = (j: Journey) => [
+    -j.requestedDepartureTime,
+    j.arrivalTime,
+    j.boardingCount,
+    j.walkingDurationSeconds,
+    j.scheduledTransferRisk,
+  ];
+  return journeys.filter((b) =>
+    journeys.every((a) => {
+      const [ka, kb] = [key(a), key(b)];
+      return !(
+        ka.every((v, i) => v <= kb[i]!) && ka.some((v, i) => v < kb[i]!)
+      );
+    }),
+  );
+}
+function* seededNetworks(seed = 271828) {
+  const random = seededRandom(seed);
+  for (let fixture = 0; fixture < 160; fixture++) {
+    const base = randomSchedule(random);
+    // larger allowances than the oracle's so missed connections are common
+    yield [
+      fixture,
+      buildSchedule({
+        ...base,
+        stops: base.stops.map((s) => ({ ...s, changeSeconds: random(30) })),
+      }),
+    ] as const;
+  }
+}
+function departureInstants(schedule: RoutingSchedule) {
+  return [
+    ...new Set(
+      schedule.trips.flatMap((t) =>
+        t.events
+          .filter(
+            (e) => e.stopId === 'A' && e.pickup === 0 && e.departure !== null,
+          )
+          .map((e) => e.departure!),
+      ),
+    ),
+  ];
+}

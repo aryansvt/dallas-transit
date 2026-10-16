@@ -77,6 +77,16 @@ export interface RoutingRequest {
   readonly maxTransfers?: number;
 }
 
+export interface WindowRequest {
+  readonly serviceDate: string;
+  readonly originStopId: string;
+  /** Departure instants to scan; deduplicated and run latest first. */
+  readonly departureTimes: readonly number[];
+  /** Arrivals after this are dropped; arriving exactly at it is on time. */
+  readonly arrivalDeadline?: number;
+  readonly maxTransfers?: number;
+}
+
 export interface DeadlineTarget {
   readonly stopId: string;
   /** Latest acceptable alighting time; links never finish a journey. */
