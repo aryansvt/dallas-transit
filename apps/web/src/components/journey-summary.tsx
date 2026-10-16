@@ -11,8 +11,9 @@ import {
   toggleSaved,
   type LocalPlaces,
 } from '../lib/local-places';
-import { displayDate, duration } from '../lib/time';
-import { JourneyTime, RouteSequence } from './journey';
+import { worstTransfer } from '../lib/presentation';
+import { displayDate, duration, serviceTime } from '../lib/time';
+import { JourneyTime, RouteSequence, TransferTag } from './journey';
 import { Icon } from './icon';
 
 export function JourneySummary({
@@ -23,6 +24,8 @@ export function JourneySummary({
   destination,
   places,
   routeReason,
+  arriveBy,
+  warning,
   onBack,
   onUpdatePlaces,
 }: {
@@ -33,11 +36,16 @@ export function JourneySummary({
   destination: Place | null;
   places: LocalPlaces;
   routeReason: string;
+  /** Arrive-by trips also say when to leave. */
+  arriveBy: boolean;
+  /** Why this leave time does not work, such as a class still under way. */
+  warning: string;
   onBack(): void;
   onUpdatePlaces(next: LocalPlaces): void;
 }) {
   const [full, setFull] = useState(false);
   const saved = destination ? isSaved(places, destination) : false;
+  const worst = worstTransfer(journey);
   return (
     <section className="detail-summary" aria-labelledby="journey-title">
       <button className="back-button" onClick={onBack}>
@@ -89,11 +97,33 @@ export function JourneySummary({
         </div>
       </div>
       <p className="summary-metrics">
+        {arriveBy && (
+          <>
+            Leave by{' '}
+            {
+              serviceTime(journey.serviceDate, journey.requestedDepartureTime)
+                .clock
+            }{' '}
+            ·{' '}
+          </>
+        )}
         {journey.transferCount === 0
           ? 'No transfers'
           : `${journey.transferCount} transfer${journey.transferCount > 1 ? 's' : ''}`}{' '}
         · {duration(journey.walkingDurationSeconds)} walking
+        {worst && (
+          <>
+            {' '}
+            <TransferTag level={worst} tightest={journey.transferCount > 1} />
+          </>
+        )}
       </p>
+      {warning && (
+        <p className="board-note">
+          <Icon name="alert" />
+          {warning}
+        </p>
+      )}
       <RouteSequence journey={journey} references={references} />
       <p className="results-caption summary-context">
         <span className="schedule-tag">

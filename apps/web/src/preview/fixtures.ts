@@ -11,6 +11,7 @@ import { ClientError, errorMessage, type TransitClient } from '../lib/api';
 import type { ClassSeries } from '../lib/ics';
 import type { Presets } from '../lib/presets';
 import type { PreviewSetup } from '../lib/preview-setup';
+import { classDestination } from '../lib/class-schedule';
 import { STUDENT_PLACES } from '../lib/student-places';
 
 // Original synthetic presentation fixtures. Names provide Dallas context; times,
@@ -73,6 +74,14 @@ const references: References = {
       platformCode: null,
       parentStationId: null,
     },
+    {
+      stopId: 'pearl',
+      name: 'Pearl/Arts District Station',
+      coordinate: { latitude: 32.7866, longitude: -96.7932 },
+      code: null,
+      platformCode: null,
+      parentStationId: null,
+    },
   ],
   routes: [
     {
@@ -119,9 +128,16 @@ const references: References = {
     { tripId: 'orange-trip', headsign: 'Parker Road', directionId: 0 },
   ],
 };
+type OkResponse = Extract<JourneyResponse, { status: 'ok' }>;
+/** Fixture risk on a later boarding, in router seconds (see presentation). */
+const later = (leg: TransitLeg, risk: number): TransitLeg => ({
+  ...leg,
+  scheduledTransferRisk: risk,
+});
 export function previewResponse(
   overnight = false,
-): Extract<JourneyResponse, { status: 'ok' }> {
+  variant: 'default' | 'transfers' | 'two-transfers' = 'default',
+): OkResponse {
   const offset = overnight ? 57600 : 0;
   const base = {
     publicationId: '11111111-1111-4111-8111-111111111111',
@@ -164,10 +180,13 @@ export function previewResponse(
   ): GeographicJourney => {
     const last = rides.at(-1)!;
     const arrivalTime = last.arrivalTime + egressSeconds;
+    const egress = references.stops.find(
+      (s) => s.stopId === last.alightingStopId,
+    )!;
     return {
       ...base,
       accessStopId: 'west',
-      egressStopId: 'paul',
+      egressStopId: egress.stopId,
       arrivalTime,
       durationSeconds: arrivalTime - base.requestedDepartureTime,
       boardingCount: rides.length,
@@ -191,8 +210,8 @@ export function previewResponse(
         {
           kind: 'walk',
           phase: 'egress',
-          stopId: 'paul',
-          origin: references.stops[2]!.coordinate,
+          stopId: egress.stopId,
+          origin: egress.coordinate,
           destination: base.destination,
           departureTime: last.arrivalTime,
           arrivalTime,
@@ -202,23 +221,43 @@ export function previewResponse(
       ],
     };
   };
+  const red = transit('red', 'west', 'akard', 29160, 29700, 2);
+  // spare after the two-minute change allowance: 8 min, 3 min and none
+  const comfortable = later(
+    transit('blue', 'akard', 'paul', 30300, 30840, 3),
+    0,
+  );
+  const tight = later(transit('blue', 'akard', 'paul', 30000, 30540, 3), 120);
+  const risky = later(transit('orange', 'akard', 'paul', 29820, 30300, 2), 300);
+  const journeys = {
+    default: [
+      make([red, tight], 180, 180),
+      make([transit('bus', 'west', 'paul', 29280, 30840, 8)], 180, 300),
+      make([transit('orange', 'west', 'paul', 29820, 31200, 4)], 60, 120),
+    ],
+    transfers: [
+      make([red, risky], 180, 180),
+      make([red, tight], 180, 180),
+      make([red, comfortable], 180, 180),
+    ],
+    'two-transfers': [
+      make(
+        [
+          red,
+          comfortable,
+          later(transit('bus', 'paul', 'pearl', 30960, 31200, 2), 300),
+        ],
+        180,
+        120,
+      ),
+    ],
+  }[variant];
   return {
     ...base,
     status: 'ok',
     incomplete: false,
     references,
-    journeys: [
-      make(
-        [
-          transit('red', 'west', 'akard', 29160, 29700, 2),
-          transit('blue', 'akard', 'paul', 30000, 30540, 3),
-        ],
-        180,
-        180,
-      ),
-      make([transit('bus', 'west', 'paul', 29280, 30840, 8)], 180, 300),
-      make([transit('orange', 'west', 'paul', 29820, 31200, 4)], 60, 120),
-    ],
+    journeys,
   };
 }
 export const scenarios = {
@@ -241,6 +280,11 @@ export const scenarios = {
   insight: '17 · Departure-time insight',
   'arrive-by': '18 · Arrive-by results',
   'student-worst': '19 · Student, worst-case data',
+  'arrive-late': '20 · Arrive-by, leave time passed',
+  'class-conflict': '21 · Next class, leave during class',
+  transfers: '22 · Transfer confidence',
+  'transfers-detail': '23 · Two transfers, step by step',
+  'insight-later': '24 · Insight, no need to rush',
 } as const;
 export type Scenario = keyof typeof scenarios;
 // a fall 2026 timetable; one building has no official entrance yet
@@ -278,36 +322,62 @@ export const previewClasses: ClassSeries[] = [
     weekdays: [1, 3],
   },
 ];
+// a back-to-back class across campus, for a leave time inside CS 3345
+const backToBack: ClassSeries = {
+  ...semester,
+  id: 'psy2301',
+  title: 'PSY 2301.002 Introduction to Psychology',
+  location: 'GR 2.530',
+  startTime: '11:30',
+  weekdays: [2, 4],
+};
 type WalkingLeg = Extract<GeographicJourney['legs'][number], { kind: 'walk' }>;
 const [utd, , , northside] = STUDENT_PLACES.map(copyPlace);
 const previewPresets: Presets = { version: 1, home: northside!, school: utd! };
-/** Arrive-by results: each option leaves as late as it can. */
-function arriveByResponse(): JourneyResponse {
+/** Arrive-by results: each option leaves as late as it can, latest first as
+ * the API orders them. The 9:00 AM fixture moves to any deadline and date. */
+function arriveByResponse(
+  arrivalTime = 32400,
+  arrivalBufferMinutes = 10,
+  serviceDate = '2026-09-18',
+): OkResponse {
   const response = previewResponse();
+  const shift = arrivalTime - 32400;
+  const moved = <T extends { departureTime: number; arrivalTime: number }>(
+    l: T,
+  ): T => ({
+    ...l,
+    departureTime: l.departureTime + shift,
+    arrivalTime: l.arrivalTime + shift,
+  });
   return {
     publicationId: response.publicationId,
-    serviceDate: response.serviceDate,
+    serviceDate,
     origin: response.origin,
     destination: response.destination,
-    requestedArrivalTime: 32400,
-    arrivalBufferMinutes: 10,
+    requestedArrivalTime: arrivalTime,
+    arrivalBufferMinutes,
     status: 'ok',
     incomplete: false,
     references: response.references,
-    journeys: response.journeys.map((j) => {
-      const [walk, ride] = j.legs as [WalkingLeg, TransitLeg];
-      const access = walk.arrivalTime - walk.departureTime;
-      const leave = ride.departureTime - access - 120;
-      return {
-        ...j,
-        requestedDepartureTime: leave,
-        durationSeconds: j.arrivalTime - leave,
-        legs: [
-          { ...walk, departureTime: leave, arrivalTime: leave + access },
-          ...j.legs.slice(1),
-        ],
-      };
-    }),
+    journeys: response.journeys
+      .map((j) => {
+        const [walk, ride] = j.legs as [WalkingLeg, TransitLeg];
+        const access = walk.arrivalTime - walk.departureTime;
+        const leave = ride.departureTime - access - 120 + shift;
+        return {
+          ...j,
+          serviceDate,
+          requestedDepartureTime: leave,
+          arrivalTime: j.arrivalTime + shift,
+          durationSeconds: j.arrivalTime + shift - leave,
+          legs: [
+            { ...walk, departureTime: leave, arrivalTime: leave + access },
+            ...j.legs.slice(1).map(moved),
+          ],
+        };
+      })
+      .sort((a, b) => b.requestedDepartureTime - a.requestedDepartureTime),
   };
 }
 export function previewSetup(scenario: Scenario): PreviewSetup {
@@ -402,7 +472,49 @@ export function previewSetup(scenario: Scenario): PreviewSetup {
         },
       },
     };
-  if (scenario === 'arrive-by') return { ...setup, data: arriveByResponse() };
+  // Friday 7:48 AM: the latest option leaves at 8:14
+  if (scenario === 'arrive-by')
+    return { ...setup, now: '2026-09-18T12:48:00Z', data: arriveByResponse() };
+  if (scenario === 'arrive-late')
+    return { ...setup, now: '2026-09-18T13:20:00Z', data: arriveByResponse() };
+  // in CS 3345 until 11:15; getting to an 11:30 class means leaving at 10:44
+  if (scenario === 'class-conflict') {
+    const target = classDestination(backToBack);
+    return {
+      ...student,
+      now: '2026-09-17T15:20:00Z',
+      presets: previewPresets,
+      schedule: [...previewClasses, backToBack],
+      destination: target && 'place' in target ? target.place : null,
+      departure: {
+        mode: 'by',
+        date: '2026-09-17',
+        time: '11:30',
+        bufferMinutes: 10,
+      },
+      data: arriveByResponse(41400, 10, '2026-09-17'),
+    };
+  }
+  if (scenario === 'transfers')
+    return { ...setup, data: previewResponse(false, 'transfers') };
+  if (scenario === 'transfers-detail')
+    return {
+      ...setup,
+      data: previewResponse(false, 'two-transfers'),
+      detail: 0,
+    };
+  if (scenario === 'insight-later')
+    return {
+      ...setup,
+      data: {
+        ...response,
+        departureInsight: {
+          kind: 'no-rush',
+          departureTime: 29340,
+          arrivalChangeSeconds: 0,
+        },
+      },
+    };
   if (scenario === 'granted') return { ...setup, destination: null };
   if (scenario === 'manual')
     return { ...setup, origin: null, destination: null };
@@ -469,8 +581,14 @@ export const previewClient: TransitClient = {
       ),
     };
   },
-  async journeys(_request: JourneyRequest, signal) {
+  async journeys(request: JourneyRequest, signal) {
     await delay(signal);
-    return previewResponse();
+    return 'arrivalTime' in request
+      ? arriveByResponse(
+          request.arrivalTime,
+          request.arrivalBufferMinutes ?? 0,
+          request.serviceDate,
+        )
+      : previewResponse();
   },
 };

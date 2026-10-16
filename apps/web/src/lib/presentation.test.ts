@@ -117,27 +117,25 @@ it('words the router transfer shortfall and never invents one', () => {
 });
 it('reports the tightest transfer of a journey', () => {
   const journey = previewResponse().journeys[0]!;
+  // each ride's risk in order; undefined means the response had none
   const withRisk = (...risks: (number | undefined)[]) => {
     let ride = 0;
     return {
       ...journey,
-      legs: journey.legs.map((l) =>
-        l.kind === 'transit' && risks[ride++] !== undefined
-          ? { ...l, scheduledTransferRisk: risks[ride - 1] }
-          : l,
-      ),
+      legs: journey.legs.map((l) => {
+        if (l.kind !== 'transit') return l;
+        const risk = risks[ride++];
+        const bare = Object.fromEntries(
+          Object.entries(l).filter(([k]) => k !== 'scheduledTransferRisk'),
+        ) as typeof l;
+        return risk === undefined
+          ? bare
+          : { ...bare, scheduledTransferRisk: risk };
+      }),
     };
   };
   expect(worstTransfer(withRisk(undefined, 120))).toBe('tight');
   expect(worstTransfer(withRisk(undefined, 0))).toBe('comfortable');
   // an older response without per-leg risk gets no label
-  const bare = {
-    ...journey,
-    legs: journey.legs.map((l) => {
-      if (l.kind !== 'transit') return l;
-      const { scheduledTransferRisk: _, ...rest } = l;
-      return rest;
-    }),
-  };
-  expect(worstTransfer(bare)).toBeNull();
+  expect(worstTransfer(withRisk(undefined, undefined))).toBeNull();
 });

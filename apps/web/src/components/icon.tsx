@@ -23,7 +23,8 @@ export function Icon({
     | 'home'
     | 'school'
     | 'calendar'
-    | 'edit';
+    | 'edit'
+    | 'check';
   className?: string;
 }) {
   const paths: Record<typeof name, React.ReactNode> = {
@@ -102,6 +103,7 @@ export function Icon({
         <path d="M3.5 10h17M8 3v4m8-4v4M8 14h2m4 0h2m-8 3h2" />
       </>
     ),
+    check: <path d="m5 12.5 4.5 4.5L19 7" />,
     edit: <path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16Zm9.5-13.5 4 4" />,
     github: (
       <>

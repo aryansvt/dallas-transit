@@ -6,7 +6,9 @@ import { copyPlace, type Place } from '@dallas-transit/shared';
 import { liveClient, type TransitClient } from '../lib/api';
 import {
   CLASS_BUFFER_MINUTES,
+  classAtLeave,
   classDestination,
+  classWarning,
   earliestLeave,
   readSchedule,
   writeSchedule,
@@ -231,6 +233,21 @@ function Planner({
     setDeparture(when);
     findRoutes({ departure: when });
   };
+  // a passed leave-by: see when you would get there going now
+  const leaveNowInstead = () => {
+    const when: Departure = { mode: 'now' };
+    setDeparture(when);
+    findRoutes({ departure: when });
+  };
+  const arriveByTrip = Boolean(result && 'requestedArrivalTime' in result);
+  const duringClass =
+    arriveByTrip && journey
+      ? classAtLeave(
+          classes,
+          journey.serviceDate,
+          journey.requestedDepartureTime,
+        )
+      : null;
   const showJourney = (index: number) => {
     trip.show(index);
     requestAnimationFrame(() => {
@@ -334,6 +351,8 @@ function Planner({
               loading={loading}
               error={error}
               selected={trip.selected}
+              classes={classes}
+              now={now}
               onCancel={() =>
                 trip.reset(
                   'Search canceled. You can change your trip and search again.',
@@ -343,6 +362,7 @@ function Planner({
               onChangeDeparture={() => setDepartureOpen(true)}
               onSelect={showJourney}
               onInsight={planAt}
+              onLeaveNow={leaveNowInstead}
             />
           </div>
           {detail && journey && result && (
@@ -354,6 +374,8 @@ function Planner({
               destination={destination}
               places={places}
               routeReason={trip.routeReason}
+              arriveBy={arriveByTrip}
+              warning={duringClass ? classWarning(duringClass) : ''}
               onBack={goBack}
               onUpdatePlaces={persist}
             />
@@ -415,13 +437,6 @@ function Planner({
           </details>
         </footer>
       </main>
-      <div className="sr-only" role="status">
-        {loading
-          ? 'Searching for routes.'
-          : result
-            ? `${result.journeys.length} route options found.`
-            : ''}
-      </div>
       {searchTarget && (
         <PlaceSearch
           key={searchTarget}

@@ -143,9 +143,54 @@ it('preserves transfer instructions, overnight date context and partial-result l
   expect(container.querySelector('.timeline')?.textContent).toContain(
     'next day',
   );
-  expect(container.querySelector('.timeline')?.textContent).not.toMatch(
-    /comfortable|tight|risk/i,
+  // the router's own per-leg risk, not a guess: 3 spare minutes is tight
+  expect(container.querySelector('.transfer-step')?.textContent).toContain(
+    'Tight transfer5 min to connect',
   );
+});
+it('labels each transfer from router risk and never invents one', async () => {
+  await render('transfers');
+  const tags = [...container.querySelectorAll('.route-card .transfer-tag')];
+  expect(tags.map((t) => t.textContent)).toEqual([
+    'Risky transfer',
+    'Tight transfer',
+    'Comfortable transfer',
+  ]);
+  // the meaning is in words and an icon, not only color
+  expect(tags.every((t) => t.querySelector('svg'))).toBe(true);
+  const { references, journeys } = previewResponse();
+  const bare = {
+    ...journeys[0]!,
+    legs: journeys[0]!.legs.map((l) =>
+      l.kind === 'transit' ? { ...l, scheduledTransferRisk: undefined } : l,
+    ),
+  };
+  await act(async () =>
+    root.render(
+      <Timeline
+        journey={JSON.parse(JSON.stringify(bare))}
+        references={references}
+        originName="Origin"
+        destinationName="Destination"
+      />,
+    ),
+  );
+  expect(container.textContent).toContain('Transfer at Akard Station');
+  expect(container.textContent).not.toMatch(/comfortable|tight|risky/i);
+});
+it('names the tightest of several transfers and words each one in the steps', async () => {
+  await render('transfers-detail');
+  expect(
+    container.querySelector('.summary-metrics .transfer-tag')?.textContent,
+  ).toBe('Tightest: Risky transfer');
+  expect(
+    [...container.querySelectorAll('.transfer-confidence')].map(
+      (p) => p.textContent,
+    ),
+  ).toEqual([
+    'Comfortable transfer10 min to connect',
+    'Risky transfer2 min to connect',
+  ]);
 });
 it('cancels superseded journey queries and ignores late completion', async () => {
   const signals: AbortSignal[] = [];
@@ -364,4 +409,8 @@ it('renders measured interchange walking and explains a same-route vehicle chang
   expect(container.textContent).toContain('Walk to');
   expect(container.textContent).toContain('150 m');
   expect(container.textContent).toContain('Change vehicles: board');
+  // the connection is timed from getting off, including the walk
+  expect(container.querySelector('.transfer-step')?.textContent).toContain(
+    'Tight transfer5 min to connect',
+  );
 });
