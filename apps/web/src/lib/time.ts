@@ -128,6 +128,18 @@ export function duration(seconds: number) {
     ? `${minutes} min`
     : `${Math.floor(minutes / 60)} hr${minutes % 60 ? ` ${minutes % 60} min` : ''}`;
 }
+/** "in 26 min", "6 min ago" or "now" in whole minutes; another Dallas day
+ * reads as its date. */
+export function fromNow(instant: Date, now: Date) {
+  const day = dallasParts(instant).date;
+  if (day !== dallasParts(now).date) return displayDate(day);
+  const seconds = (instant.getTime() - now.getTime()) / 1000;
+  const minutes = Math.floor(Math.abs(seconds) / 60);
+  if (!minutes) return 'now';
+  return seconds > 0
+    ? `in ${duration(minutes * 60)}`
+    : `${duration(minutes * 60)} ago`;
+}
 export function displayDate(date: string) {
   return new Intl.DateTimeFormat('en-US', {
     timeZone: 'UTC',

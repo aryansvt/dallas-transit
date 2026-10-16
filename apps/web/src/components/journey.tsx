@@ -9,8 +9,11 @@ import {
   routeColors,
   routeName,
   stopName,
+  transferLevel,
   transitLegs,
   transitMode,
+  worstTransfer,
+  type TransferLevel,
 } from '../lib/presentation';
 import { duration, serviceTime } from '../lib/time';
 import { Icon } from './icon';
@@ -43,6 +46,52 @@ export function RouteBadge({ route }: { route: RouteDetails | undefined }) {
       />
       {routeName(route)}
     </span>
+  );
+}
+const transferWords = {
+  comfortable: ['Comfortable', 'check'],
+  tight: ['Tight', 'clock'],
+  risky: ['Risky', 'alert'],
+} as const;
+/** Scheduled connection confidence: an icon and a word, never color alone. */
+export function TransferTag({
+  level,
+  tightest = false,
+}: {
+  level: TransferLevel;
+  /** Several transfers: name the tightest. */
+  tightest?: boolean;
+}) {
+  const [word, icon] = transferWords[level];
+  return (
+    <span className={`transfer-tag is-${level}`}>
+      <Icon name={icon} />
+      {tightest ? `Tightest: ${word}` : word}
+      <span className="sr-only"> transfer</span>
+    </span>
+  );
+}
+/** The tag and connection time for boarding the ride at legs[ride]. */
+function TransferConfidence({
+  journey,
+  ride,
+}: {
+  journey: GeographicJourney;
+  ride: number;
+}) {
+  const leg = journey.legs[ride];
+  if (leg?.kind !== 'transit') return null;
+  const level = transferLevel(leg.scheduledTransferRisk);
+  const prior = journey.legs
+    .slice(0, ride)
+    .filter((l) => l.kind === 'transit')
+    .at(-1);
+  if (!level || !prior) return null;
+  return (
+    <p className="transfer-confidence">
+      <TransferTag level={level} />
+      <span>{duration(leg.departureTime - prior.arrivalTime)} to connect</span>
+    </p>
   );
 }
 export function RouteSequence({
@@ -81,6 +130,7 @@ export function RouteCard({
   selected,
   onSelect,
   arriveBy = false,
+  duringClass = false,
 }: {
   journey: GeographicJourney;
   all: readonly GeographicJourney[];
@@ -89,10 +139,13 @@ export function RouteCard({
   onSelect(): void;
   /** Arrive-by results lead with the time to leave. */
   arriveBy?: boolean;
+  /** The leave time falls inside a class on this device. */
+  duringClass?: boolean;
 }) {
   const rides = transitLegs(journey);
   const first = rides[0];
   const label = distinction(journey, all, arriveBy);
+  const worst = worstTransfer(journey);
   return (
     <button
       className={`route-card${selected ? ' selected' : ''}`}
@@ -140,8 +193,17 @@ export function RouteCard({
         </span>
       )}
       {rides[1] && (
-        <span className="secondary">
-          Transfer at {stopName(references, rides[1].boardingStopId)}
+        <span className="route-transfer">
+          <span className="secondary">
+            Transfer at {stopName(references, rides[1].boardingStopId)}
+          </span>
+          {worst && <TransferTag level={worst} tightest={rides.length > 2} />}
+        </span>
+      )}
+      {duringClass && (
+        <span className="route-warning">
+          <Icon name="alert" />
+          Leaves during class
         </span>
       )}
       <span className="route-open">
@@ -228,6 +290,7 @@ export function Timeline({
                       </>
                     )}
                   </p>
+                  <TransferConfidence journey={journey} ride={i + 1} />
                 </div>
               </li>
             );
@@ -261,6 +324,7 @@ export function Timeline({
                     <p>
                       Continue on <RouteBadge route={route} />
                     </p>
+                    <TransferConfidence journey={journey} ride={i} />
                   </div>
                 </li>
               )}

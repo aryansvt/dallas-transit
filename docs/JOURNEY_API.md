@@ -88,6 +88,11 @@ Journey walking totals now include validated pedestrian interchanges. Optional
 `scheduledTransferRisk` is a non-probabilistic scheduled slack shortfall (seconds,
 lower is better). A transfer leg may carry `pedestrian: { distanceMeters,
 provenance }`; absent metadata retains legacy unmeasured-interchange semantics.
+Each transit leg after the first boarding also carries its own
+`scheduledTransferRisk`: the seconds that connection misses from the same
+five-minute allowance. Leg values sum to the journey value, and the first ride has
+none. The web app words it per transfer: 0 is Comfortable, up to 180 is Tight,
+above 180 is Risky. A leg without the field gets no label.
 Ranking is arrival, transfers, walking, then scheduled risk. The three-result cap
 reserves useful transfer/walking alternatives and deduplicates identical ride
 sequences rather than equal metric triples.

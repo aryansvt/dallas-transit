@@ -27,7 +27,7 @@ Used on a phone, often outdoors or at a stop, on spotty networks. Flow: origin (
 - Scope is Dallas/DART only; not a nationwide app in V1.
 - Schedule-based bus and rail routing is deployed. DART realtime is disabled; no permitted live feed is confirmed.
 - Default itinerary priority: earliest arrival, fewer transfers, less walking, lower transfer risk. Not an opaque weighted score.
-- Transfer confidence is deterministic (Comfortable, Tight, At risk), not statistical.
+- Transfer confidence is deterministic (Comfortable, Tight, Risky), worded from the router's per-transfer scheduled risk, not statistical.
 - Maps show places and stops, not route polylines. MapLibre / Mapbox for maps and search; Geoapify for walking.
 - Known limits are surfaced to users: no walking-only planning, no automatic adjacent-service-day search, scheduled connections are not live predictions.
 - Wheelchair-aware routing is undecided until data is trustworthy.

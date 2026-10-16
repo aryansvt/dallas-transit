@@ -31,3 +31,39 @@ it('serializes pedestrian metadata without inventing it for legacy interchanges'
     await app.close();
   }
 });
+it('serializes per-boarding transfer risk only where the router set it', async () => {
+  const app = Fastify();
+  const ride = {
+    kind: 'transit',
+    tripId: 't',
+    routeId: 'r',
+    patternId: 'p',
+    boardingStopId: 'a',
+    boardingOccurrence: 0,
+    boardingSequence: 1,
+    alightingStopId: 'b',
+    alightingOccurrence: 1,
+    alightingSequence: 2,
+    departureTime: 100,
+    arrivalTime: 200,
+  };
+  app.get('/later', { schema: { response: { 200: legSchema } } }, async () => ({
+    ...ride,
+    scheduledTransferRisk: 120,
+  }));
+  app.get(
+    '/first',
+    { schema: { response: { 200: legSchema } } },
+    async () => ride,
+  );
+  try {
+    expect((await app.inject('/later')).json()).toMatchObject({
+      scheduledTransferRisk: 120,
+    });
+    expect((await app.inject('/first')).json()).not.toHaveProperty(
+      'scheduledTransferRisk',
+    );
+  } finally {
+    await app.close();
+  }
+});

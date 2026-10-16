@@ -3,7 +3,9 @@ import {
   distinction,
   routeColors,
   routeName,
+  transferLevel,
   transitMode,
+  worstTransfer,
 } from './presentation';
 import { journeyPoints } from './map-points';
 import {
@@ -102,4 +104,38 @@ it('keeps tied fastest badges factual and prioritizes fewer transfers over walki
   expect(distinction(c, [a, b, c])).toBe('');
   const winner = { ...a, walkingDurationSeconds: 50 };
   expect(distinction(winner, [winner, b, c])).toBe('Fewest transfers');
+});
+it('words the router transfer shortfall and never invents one', () => {
+  expect([0, 1, 180, 181, 300].map(transferLevel)).toEqual([
+    'comfortable',
+    'tight',
+    'tight',
+    'risky',
+    'risky',
+  ]);
+  expect(transferLevel(undefined)).toBeNull();
+});
+it('reports the tightest transfer of a journey', () => {
+  const journey = previewResponse().journeys[0]!;
+  // each ride's risk in order; undefined means the response had none
+  const withRisk = (...risks: (number | undefined)[]) => {
+    let ride = 0;
+    return {
+      ...journey,
+      legs: journey.legs.map((l) => {
+        if (l.kind !== 'transit') return l;
+        const risk = risks[ride++];
+        const bare = Object.fromEntries(
+          Object.entries(l).filter(([k]) => k !== 'scheduledTransferRisk'),
+        ) as typeof l;
+        return risk === undefined
+          ? bare
+          : { ...bare, scheduledTransferRisk: risk };
+      }),
+    };
+  };
+  expect(worstTransfer(withRisk(undefined, 120))).toBe('tight');
+  expect(worstTransfer(withRisk(undefined, 0))).toBe('comfortable');
+  // an older response without per-leg risk gets no label
+  expect(worstTransfer(withRisk(undefined, undefined))).toBeNull();
 });

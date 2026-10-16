@@ -113,6 +113,9 @@ export interface TransitLeg {
   readonly alightingOccurrence: number;
   readonly alightingSequence: number;
   readonly arrivalTime: number;
+  /** Seconds this boarding misses from the five-minute spare connection
+   * allowance. Absent on the first boarding; legs sum to the journey value. */
+  readonly scheduledTransferRisk?: number;
 }
 
 export interface TransferLeg {

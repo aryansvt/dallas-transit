@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { ClassSeries } from './ics';
 import {
+  classAtLeave,
   classDestination,
+  classRoom,
+  classWarning,
   earliestLeave,
   importSchedule,
   MAX_CLASSES,
@@ -179,6 +182,32 @@ describe('earliestLeave', () => {
     expect(earliestLeave([series()], '2026-09-01', 37800)).toBe(40500);
     expect(earliestLeave([series()], '2026-09-01', 40500)).toBeUndefined();
     expect(earliestLeave([], '2026-09-01', 37800)).toBeUndefined();
+  });
+});
+
+describe('leaving during a class', () => {
+  // Tuesday 2026-09-01: the 10:00 class ends at 11:15, service second 40500
+  it('finds the class a leave time falls inside, ending exclusively', () => {
+    const during = classAtLeave([series()], '2026-09-01', 39000);
+    expect(during?.end).toEqual(new Date('2026-09-01T16:15:00Z'));
+    expect(classAtLeave([series()], '2026-09-01', 40500)).toBeNull();
+    expect(classAtLeave([series()], '2026-09-01', 35000)).toBeNull();
+  });
+
+  it('names the room when the campus map knows it, and class otherwise', () => {
+    const during = classAtLeave([series()], '2026-09-01', 39000)!;
+    expect(classWarning(during)).toBe(
+      "You'd need to leave ECSW 1.315 before class ends at 11:15 AM.",
+    );
+    const address = {
+      ...during,
+      series: series({ location: '800 W Campbell Rd, Richardson, TX 75080' }),
+    };
+    expect(classWarning(address)).toBe(
+      "You'd need to leave class before it ends at 11:15 AM.",
+    );
+    expect(classRoom(series({ location: 'ROC' }))).toBe('ROC');
+    expect(classRoom(series({ location: '' }))).toBeNull();
   });
 });
 

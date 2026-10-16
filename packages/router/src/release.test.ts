@@ -44,6 +44,10 @@ it('routes 232 -> directed pedestrian interchange -> 236 -> 227 and counts walk 
     'transit',
     'transit',
   ]);
+  // each boarding after the first carries its own share of the journey risk
+  expect(
+    j.legs.map((l) => (l.kind === 'transit' ? l.scheduledTransferRisk : '-')),
+  ).toEqual([undefined, '-', 300, 300]);
   expect(query(buildSchedule({ ...schedule, transfers: [] })).status).toBe(
     'no-journey',
   );
@@ -110,6 +114,26 @@ it('routes 232 -> directed pedestrian interchange -> 236 -> 227 and counts walk 
       },
     ],
   });
+});
+it('splits scheduled transfer risk per boarding and sums to the journey value', () => {
+  const schedule = buildSchedule(
+    input(
+      [
+        trip('X', ['A', 'B'], [100, 200]),
+        trip('Y', ['B', 'C'], [620, 700]),
+        trip('Z', ['C', 'D'], [880, 960]),
+      ],
+      {
+        stops: ['A', 'B', 'C', 'D'].map((id) => ({ id, changeSeconds: 120 })),
+      },
+    ),
+  );
+  const j = journeys(schedule)[0]!;
+  // B: ready 320, leaves 620, 300 spare -> 0. C: ready 820, leaves 880 -> 240
+  expect(
+    j.legs.map((l) => (l.kind === 'transit' ? l.scheduledTransferRisk : '-')),
+  ).toEqual([undefined, 0, 240]);
+  expect(j.scheduledTransferRisk).toBe(240);
 });
 it('cannot concatenate pedestrian links or mix them with legacy links to evade the envelope', () => {
   const base = input([

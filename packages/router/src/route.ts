@@ -41,7 +41,16 @@ function reconstruct(
     cursor !== null;
     cursor = cursor.previous
   )
-    if (cursor.leg) legs.push(cursor.leg);
+    if (cursor.leg)
+      // a later boarding keeps the risk it added; the first adds none
+      legs.push(
+        cursor.leg.kind === 'transit' && cursor.boardings > 1
+          ? {
+              ...cursor.leg,
+              scheduledTransferRisk: cursor.risk - cursor.previous!.risk,
+            }
+          : cursor.leg,
+      );
   legs.reverse();
   const departure = requested ?? legs[0]?.departureTime ?? label.time;
   const boardings = label.boardings;
