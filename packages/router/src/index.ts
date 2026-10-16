@@ -14,6 +14,8 @@ export {
   DEFAULT_GEOGRAPHIC_POLICY,
   geographicPolicy,
   validateCoordinate,
+  isArriveBy,
+  departureWindow,
   validateWalkingRoute,
   validateGeographicRequest,
   sameCoordinate,
