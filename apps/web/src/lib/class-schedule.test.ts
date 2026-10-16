@@ -155,7 +155,7 @@ describe('next and ongoing classes', () => {
     expect(nextClass(classes, new Date('2026-12-04T12:00:00Z'))).toBeNull();
     expect(
       nextClass(
-        [series({ until: undefined })],
+        [series({ until: '2027-12-31T23:59' })],
         new Date('2026-12-04T12:00:00Z'),
       )?.start,
     ).toEqual(new Date('2026-12-08T16:00:00Z'));
