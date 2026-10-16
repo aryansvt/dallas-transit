@@ -77,6 +77,21 @@ export interface RoutingRequest {
   readonly maxTransfers?: number;
 }
 
+export interface DeadlineTarget {
+  readonly stopId: string;
+  /** Latest acceptable alighting time; links never finish a journey. */
+  readonly arrivalDeadline: number;
+}
+
+export interface LatestDeparturesRequest {
+  readonly serviceDate: string;
+  readonly originStopIds: readonly string[];
+  readonly targets: readonly DeadlineTarget[];
+  /** Departures before this are outside the window and ignored. */
+  readonly earliestDeparture: number;
+  readonly maxTransfers?: number;
+}
+
 export interface TransitLeg {
   readonly kind: 'transit';
   readonly tripId: string;

@@ -96,6 +96,55 @@ export function network() {
   );
 }
 
+/** Deterministic LCG so seeded fixtures are identical on every machine. */
+export function seededRandom(seed: number) {
+  let state = seed;
+  return (n: number) => {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+    return Math.floor((state / 4294967296) * n);
+  };
+}
+/** Tiny random A-D network with restrictions, inactive service and links. */
+export function randomSchedule(random: (n: number) => number) {
+  const stops = ['A', 'B', 'C', 'D'];
+  const trips = Array.from({ length: 5 }, (_, i) => {
+    let time = 90 + random(100);
+    return trip(`trip-${i}`, [], [], {
+      routeId: `route-${random(2)}`,
+      serviceId: random(5) === 0 ? 'inactive' : 'weekday',
+      events: Array.from({ length: 2 + random(3) }, (_, j) => {
+        time += random(35);
+        const arrival = time;
+        time += random(5);
+        return visit(stops[random(4)]!, arrival, j * 3, {
+          departure: time,
+          pickup: random(7) === 0 ? 1 : 0,
+          dropOff: random(7) === 0 ? 1 : 0,
+        });
+      }),
+    });
+  });
+  return buildSchedule(
+    input(trips, {
+      stops: stops.map((id) => ({ id, changeSeconds: random(6) })),
+      transfers: Array.from({ length: 3 }, (_, i) => ({
+        id: `link-${i}`,
+        fromStopId: stops[random(4)]!,
+        toStopId: stops[random(4)]!,
+        durationSeconds: random(8),
+        ...(random(2)
+          ? {
+              pedestrian: {
+                distanceMeters: random(20),
+                provenance: 'synthetic',
+              },
+            }
+          : {}),
+      })),
+    }),
+  );
+}
+
 export function assertJourney(
   schedule: RoutingSchedule,
   journey: Journey,
