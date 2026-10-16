@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { ClassSeries } from './ics';
 import {
   classDestination,
+  earliestLeave,
   importSchedule,
   MAX_CLASSES,
   nextClass,
@@ -169,6 +170,15 @@ describe('next and ongoing classes', () => {
       end: new Date('2026-09-01T16:15:00Z'),
     });
     expect(ongoingClass(classes, new Date('2026-09-01T16:15:00Z'))).toBeNull();
+  });
+});
+
+describe('earliestLeave', () => {
+  // Tuesday 2026-09-01: the 10:00 class ends at 11:15, service second 40500
+  it('is the end of a class under way at the departure', () => {
+    expect(earliestLeave([series()], '2026-09-01', 37800)).toBe(40500);
+    expect(earliestLeave([series()], '2026-09-01', 40500)).toBeUndefined();
+    expect(earliestLeave([], '2026-09-01', 37800)).toBeUndefined();
   });
 });
 

@@ -1,6 +1,6 @@
 import type {
   GeographicJourney,
-  GeographicRequest,
+  JourneyRequest,
   JourneyResponse,
   Place,
   References,
@@ -310,7 +310,7 @@ export const previewClient: TransitClient = {
       ),
     };
   },
-  async journeys(_request: GeographicRequest, signal) {
+  async journeys(_request: JourneyRequest, signal) {
     await delay(signal);
     return previewResponse();
   },

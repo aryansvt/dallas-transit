@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  arriveBy,
   civilInstant,
   departureAt,
   duration,
@@ -8,6 +9,13 @@ import {
   serviceTime,
 } from './time';
 describe('Dallas civil and service-day time', () => {
+  it('turns an arrive-by time into service-day seconds on its own date', () => {
+    expect(arriveBy('2026-09-18', '10:00')).toEqual({
+      serviceDate: '2026-09-18',
+      arrivalTime: 36000,
+    });
+    expect(() => arriveBy('2026-02-30', '10:00')).toThrow();
+  });
   it('selects Dallas date and seconds even when UTC is the next day', () => {
     expect(leaveNow(new Date('2026-09-19T04:15:00Z'))).toEqual({
       serviceDate: '2026-09-18',

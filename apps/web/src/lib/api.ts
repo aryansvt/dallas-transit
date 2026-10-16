@@ -1,6 +1,6 @@
 import {
   isPlace,
-  type GeographicRequest,
+  type JourneyRequest,
   type JourneyResponse,
   type PlaceSearchResponse,
   type LiveJourney,
@@ -25,7 +25,7 @@ export interface TransitClient {
     signal: AbortSignal,
   ): Promise<ReplanResponse>;
   journeys(
-    request: GeographicRequest,
+    request: JourneyRequest,
     signal: AbortSignal,
   ): Promise<JourneyResponse>;
   places(
@@ -97,7 +97,11 @@ export function parseJourneys(value: unknown): JourneyResponse {
     !validDate(String(value.serviceDate)) ||
     !point(value.origin) ||
     !point(value.destination) ||
-    !finite(value.requestedDepartureTime) ||
+    // depart-at echoes its time; arrive-by echoes the deadline and buffer
+    !(
+      finite(value.requestedDepartureTime) ||
+      (finite(value.requestedArrivalTime) && finite(value.arrivalBufferMinutes))
+    ) ||
     !Array.isArray(value.journeys) ||
     value.journeys.length > 3
   )
@@ -225,6 +229,22 @@ export function parseJourneys(value: unknown): JourneyResponse {
       }
     }
   } else return fail();
+  // the hint is secondary: a malformed one is dropped, not fatal
+  const hint = value.departureInsight;
+  if (
+    hint !== undefined &&
+    !(
+      record(hint) &&
+      ['leave-earlier', 'no-rush'].includes(String(hint.kind)) &&
+      finite(hint.departureTime) &&
+      typeof hint.arrivalChangeSeconds === 'number' &&
+      Number.isFinite(hint.arrivalChangeSeconds)
+    )
+  ) {
+    const copy = { ...value };
+    delete copy.departureInsight;
+    return copy as unknown as JourneyResponse;
+  }
   return value as unknown as JourneyResponse;
 }
 

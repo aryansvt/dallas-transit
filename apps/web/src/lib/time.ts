@@ -77,6 +77,17 @@ export function departureAt(
     );
   return { serviceDate, departureTime };
 }
+/** Arrive-by searches the arrival date's own service day. */
+export function arriveBy(date: string, time: string) {
+  const arrivalTime = Math.floor(
+    (civilInstant(date, time).getTime() - serviceAnchor(date)) / 1000,
+  );
+  if (arrivalTime < 0)
+    throw new Error(
+      'That arrival is too early in the day. Choose a later time.',
+    );
+  return { serviceDate: date, arrivalTime };
+}
 export function leaveNow(now = new Date()) {
   const serviceDate = dallasParts(now).date;
   const departureTime = Math.floor(

@@ -6,6 +6,7 @@ import {
   parseIcs,
   type ClassSeries,
 } from './ics';
+import { serviceAnchor, serviceInstant } from './time';
 import { matchBuilding } from './utd-buildings';
 
 export const SCHEDULE_KEY = 'dallas-transit.schedule.v1';
@@ -121,6 +122,22 @@ export function ongoingClass(
         .map((o) => ({ series, ...o })),
     ),
   );
+}
+
+/** During a class, departure-time insight must not suggest leaving before it
+ * ends. Service-day seconds on the request's date, or undefined. */
+export function earliestLeave(
+  classes: readonly ClassSeries[],
+  serviceDate: string,
+  departureTime: number,
+): number | undefined {
+  const current = ongoingClass(
+    classes,
+    serviceInstant(serviceDate, departureTime),
+  );
+  return current
+    ? Math.ceil((current.end.getTime() - serviceAnchor(serviceDate)) / 1000)
+    : undefined;
 }
 
 /** A trip destination for a class: a verified entrance, or the building name

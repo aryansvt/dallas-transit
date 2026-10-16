@@ -1,5 +1,7 @@
 import type {
+  ArriveByRequest,
   Coordinate,
+  DepartAtRequest,
   DepartureInsight,
   GeographicJourney,
   GeographicRequest,
@@ -13,6 +15,12 @@ export type {
   GeographicRequest,
 };
 export type { TransitLeg } from '@dallas-transit/router';
+/** The wire request: arrive-by sends its buffer in whole minutes. */
+export type JourneyRequest =
+  | DepartAtRequest
+  | (Omit<ArriveByRequest, 'arrivalBufferSeconds'> & {
+      arrivalBufferMinutes?: number;
+    });
 export interface StopDetails {
   stopId: string;
   name: string;

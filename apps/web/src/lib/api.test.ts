@@ -21,6 +21,39 @@ it('accepts M5 fixtures and additive fields but rejects broken references', () =
     }),
   ).toThrow('INVALID_RESPONSE');
 });
+it('reads arrive-by context and a valid departure-time hint', () => {
+  const { requestedDepartureTime, ...data } = previewResponse() as Record<
+    string,
+    unknown
+  > & { requestedDepartureTime: number };
+  const arriveBy = {
+    ...data,
+    requestedArrivalTime: requestedDepartureTime + 3600,
+    arrivalBufferMinutes: 10,
+  };
+  expect(parseJourneys(arriveBy)).toMatchObject({
+    status: 'ok',
+    requestedArrivalTime: requestedDepartureTime + 3600,
+  });
+  expect(() => parseJourneys(data)).toThrow('INVALID_RESPONSE');
+  const hint = {
+    kind: 'leave-earlier',
+    departureTime: requestedDepartureTime - 420,
+    arrivalChangeSeconds: -1080,
+  };
+  expect(
+    parseJourneys({ ...previewResponse(), departureInsight: hint }),
+  ).toMatchObject({ departureInsight: hint });
+  for (const broken of [
+    { ...hint, kind: 'teleport' },
+    { ...hint, departureTime: -1 },
+    { ...hint, arrivalChangeSeconds: '18 min' },
+    'soon',
+  ])
+    expect(
+      parseJourneys({ ...previewResponse(), departureInsight: broken }),
+    ).not.toHaveProperty('departureInsight');
+});
 it.each([
   'INVALID_REQUEST',
   'WALKING_NOT_CONFIGURED',
