@@ -97,8 +97,6 @@ export interface LatestDeparturesRequest {
   readonly serviceDate: string;
   readonly originStopIds: readonly string[];
   readonly targets: readonly DeadlineTarget[];
-  /** Departures before this are outside the window and ignored. */
-  readonly earliestDeparture: number;
   readonly maxTransfers?: number;
 }
 

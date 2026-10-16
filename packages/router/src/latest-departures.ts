@@ -14,7 +14,6 @@ export function latestDepartures(
   request: LatestDeparturesRequest,
 ): ReadonlyMap<string, readonly (number | null)[]> {
   serviceDate(request.serviceDate);
-  integer(request.earliestDeparture, 'earliestDeparture');
   const maxTransfers = request.maxTransfers ?? DEFAULT_MAX_TRANSFERS;
   integer(maxTransfers, 'maxTransfers', 16);
   for (const target of request.targets) {
@@ -61,12 +60,6 @@ export function latestDepartures(
         for (let i = trip.events.length - 1; i >= 0; i--) {
           const event = trip.events[i]!,
             stop = tripStops[i]!;
-          // known times never rise going backward, so nothing earlier can board
-          if (
-            event.departure !== null &&
-            event.departure < request.earliestDeparture
-          )
-            break;
           // board before alighting here: forward alights first at one visit
           if (
             reaches &&

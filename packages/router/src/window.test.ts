@@ -21,13 +21,12 @@ import {
 const latest = (
   schedule: RoutingSchedule,
   deadline: number,
-  overrides: { earliestDeparture?: number; maxTransfers?: number } = {},
+  overrides: { maxTransfers?: number } = {},
 ) =>
   latestDepartures(schedule, {
     serviceDate: day,
     originStopIds: ['A'],
     targets: [{ stopId: 'D', arrivalDeadline: deadline }],
-    earliestDeparture: 0,
     maxTransfers: 1,
     ...overrides,
   }).get('A');
@@ -65,13 +64,6 @@ describe('reverse latest-departure pass', () => {
   it('needs the change allowance before a connection but not before the first ride', () => {
     // 380 + 20 misses the 390 connection; A's large allowance never applies
     expect(latest(network(20), 500)).toEqual([200, 200]);
-  });
-
-  it('ignores departures before the window start', () => {
-    expect(latest(network(), 499, { earliestDeparture: 150 })).toEqual([
-      null,
-      350,
-    ]);
   });
 
   it('keeps 24:00+ service on the same service date', () => {
@@ -113,19 +105,11 @@ describe('reverse latest-departure pass', () => {
   it('matches the forward engine on 160 seeded networks', () => {
     for (const [fixture, schedule] of seededNetworks()) {
       const instants = departureInstants(schedule);
-      for (const [deadline, earliestDeparture] of [
-        [180, 0],
-        [220, 0],
-        [260, 120],
-        [300, 0],
-        [340, 150],
-      ] as const) {
+      for (const deadline of [180, 220, 260, 300, 340]) {
         const deadlines = { C: deadline - 30, D: deadline };
         // brute force: latest first boarding of any on-time journey from any instant
         const expected: (number | null)[] = [null, null, null];
-        for (const departureTime of instants.filter(
-          (t) => t >= earliestDeparture,
-        ))
+        for (const departureTime of instants)
           for (const [stop, result] of routeToStops(
             schedule,
             {
@@ -154,7 +138,6 @@ describe('reverse latest-departure pass', () => {
               { stopId: 'C', arrivalDeadline: deadlines.C },
               { stopId: 'D', arrivalDeadline: deadlines.D },
             ],
-            earliestDeparture,
             maxTransfers: 2,
           }).get('A'),
           `fixture ${fixture}, deadline ${deadline}`,

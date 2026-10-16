@@ -115,7 +115,6 @@ export function composeGeographicJourneys(
         stopId: e.stopId,
         arrivalDeadline: egressDeadline.get(e.stopId)!,
       })),
-      earliestDeparture: earliest,
       ...transfers,
     });
   // per access: latest departure for each ride count, never before 00:00
