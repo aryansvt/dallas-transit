@@ -504,7 +504,7 @@ CI runs offline API/planner fixtures and isolated PostGIS tests. Original synthe
 fixture databases use unique names and are removed; normal DART publications remain
 untouched. No internet, DART download or public-provider credentials are needed in
 tests. Frozen install, formatting, lint, types, all regression tests, build, Compose
-and workflow validation are recorded in [the Milestone 5 review](MILESTONE_5_REVIEW.md).
+and workflow validation are recorded in [the Milestone 5 review](archive/MILESTONE_5_REVIEW.md).
 
 ## M6A place-search addition
 

@@ -14,7 +14,7 @@ this review does not claim network-wide walking coverage or final release approv
 
 ## Architecture and behavior
 
-See [ADR 0005](adr/0005-routing-quality-and-pedestrian-evidence.md).
+See [ADR 0005](../adr/0005-routing-quality-and-pedestrian-evidence.md).
 
 - Directed pedestrian evidence is publication-scoped, opt-in and immutable through
   the publishing API. It carries measured distance, provenance, validity dates,

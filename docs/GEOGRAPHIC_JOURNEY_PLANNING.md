@@ -2,7 +2,7 @@
 
 > M9C supersedes the original milestone algorithm/limits described below. Current
 > behavior is specified in [ADR 0005](adr/0005-routing-quality-and-pedestrian-evidence.md)
-> and the [M9C review](MILESTONE_9C_REVIEW.md): four-objective labels, validated
+> and the [M9C review](archive/MILESTONE_9C_REVIEW.md): four-objective labels, validated
 > pedestrian links, total walking accounting, service-aware endpoint shortlists,
 > up to six accepted endpoints per side, sixteen provider calls and 36 pair searches.
 > The remaining text preserves the original milestone rationale and CLI history.
@@ -294,7 +294,7 @@ and exits nonzero (underlying CLI exit 2). It never falls back to a fixture.
 
 ## Evidence and future boundary
 
-The [Milestone 4 review](MILESTONE_4_REVIEW.md) records exact test counts, coordinates,
+The [Milestone 4 review](archive/MILESTONE_4_REVIEW.md) records exact test counts, coordinates,
 publication, candidate distances, live walking values and measured timings. Unit
 tests use synthetic schedules, explicit route tables, mocked fetch and controlled
 promises/fake timers. PostGIS tests use uniquely named databases and preserve the

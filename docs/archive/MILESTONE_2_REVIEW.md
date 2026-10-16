@@ -26,7 +26,7 @@ CSV parsing. `workers/transit-ingest` owns ZIP handling, explicit SQL migrations
 PostgreSQL access, orchestration, activation, inspection, audit and CLI commands.
 Domain/router/realtime/shared packages and both applications remain unchanged.
 GTFS record types belong in the GTFS package; speculative routing-domain types
-were deliberately avoided. See [the design](STATIC_GTFS.md).
+were deliberately avoided. See [the design](../STATIC_GTFS.md).
 
 ## D. Exact dependencies added
 
@@ -40,7 +40,7 @@ were deliberately avoided. See [the design](STATIC_GTFS.md).
 | `@dallas-transit/gtfs` | `workspace:*` | Worker consumes the GTFS package's public interface             |
 
 Compatibility, MIT licensing, direct unpacked sizes, primary references and costs
-are recorded in [DEVELOPMENT.md](DEVELOPMENT.md#dependency-choices). The lockfile
+are recorded in [DEVELOPMENT.md](../DEVELOPMENT.md#dependency-choices). The lockfile
 adds 18 external package entries including transitives, without updating existing
 versions. No ORM, large framework, cloud infrastructure, COPY library, realtime
 library or extra archive-writing dependency was added.
@@ -57,7 +57,7 @@ timepoints, distances, calendar flags and exceptions, fares, and publication dat
 Additional optional standard fields cover agency email, route sort order, stop
 parent/location/platform/timezone/level, trip short name/accessibility/bikes, and
 feed language/contact metadata. See the exact descriptors in
-[`schema.ts`](../packages/gtfs/src/schema.ts).
+[`schema.ts`](../../packages/gtfs/src/schema.ts).
 
 `blocks.txt`, `facilities.txt`, `nodes.txt`, and `route_direction.txt` are validated
 and retained as original string-valued supplemental records. `info.txt` is retained
@@ -243,7 +243,7 @@ pnpm infra:down
 Optional `DATABASE_URL` / `TEST_DATABASE_URL` belong in the worker's ignored `.env`.
 Defaults match local Compose. Destructive reset is separately named and requires
 the explicit flag: `pnpm gtfs reset-static-data --confirm-delete-static-data`.
-It is never automatic. See [DEVELOPMENT.md](DEVELOPMENT.md#static-gtfs-workflow).
+It is never automatic. See [DEVELOPMENT.md](../DEVELOPMENT.md#static-gtfs-workflow).
 
 ## R. Documentation changes
 

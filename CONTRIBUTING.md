@@ -107,18 +107,18 @@ Keep HTTP policy and serialization in the API, and pure routing outside it.
 
 ## Frontend visual review
 
-Follow [MILESTONE_6_DESIGN.md](docs/MILESTONE_6_DESIGN.md) without inventing a new
-visual direction. Run `pnpm test:web` for behavior, not CSS snapshots. Review
+Follow [apps/web/DESIGN.md](apps/web/DESIGN.md) and
+[apps/web/PRODUCT.md](apps/web/PRODUCT.md) without inventing a new visual
+direction. Run `pnpm test:web` for behavior, not CSS snapshots. Review
 `pnpm dev:preview` at `/preview` using its state and viewport controls. Tests and
 preview must not need public providers, credentials or a DART download. The
 development route is disabled in production; synthetic fixtures never enter
 normal serving configuration. Browser and assistive-technology review remains
 necessary; DOM tests do not certify visual quality or accessibility.
 
-Milestone 6 received final human visual approval in Firefox on September 24, 2026.
-Commit, push, merge, deployment and M7 still require authorization. New map/search providers require explicit approval,
-including terms, attribution and privacy. Use targeted workspace checks while
-iterating, then run the complete milestone gates once after implementation settles.
+New map or search providers need explicit approval, including terms, attribution
+and privacy. Use targeted workspace checks while iterating, then run the complete
+gates once after the implementation settles.
 
 ## Transit data
 

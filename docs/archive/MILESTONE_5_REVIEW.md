@@ -1,7 +1,7 @@
 # Milestone 5 review package
 
 Implemented and validated on 2026-09-20. Human review is pending. This is the
-complete A–AR review; [JOURNEY_API.md](JOURNEY_API.md) is the maintained contract.
+complete A–AR review; [JOURNEY_API.md](../JOURNEY_API.md) is the maintained contract.
 
 ## A. Executive summary
 

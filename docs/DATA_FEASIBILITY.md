@@ -753,8 +753,8 @@ planning-only repository; application checks are not applicable to this document
 | Realtime access path researched | Satisfied with documented limitation | Official announcement and portal lead investigated; independent use not authorized/verified |
 | Access/rate/legal constraints documented | Satisfied as an investigation deliverable | Known notices recorded; unknown realtime limits and data-specific permissions explicitly blocked |
 | Risk register created | Satisfied | Impact, qualitative likelihood, mitigation/gates above |
-| Sample entities saved as test fixtures if legally appropriate (`START_HERE.md` §3.3) | Conditional; deferred | No maintained real-data fixtures created while redistribution terms remain unclear; examples are documented and raw source stays ignored |
-| No application architecture assumes unavailable data (`START_HERE.md` §3.3) | Satisfied | Existing conditional realtime integration retained; platform/transfer/accessibility gaps explicitly identified; no architecture changes |
+| Sample entities saved as test fixtures if legally appropriate (Milestone 0 criteria) | Conditional; deferred | No maintained real-data fixtures created while redistribution terms remain unclear; examples are documented and raw source stays ignored |
+| No application architecture assumes unavailable data (Milestone 0 criteria) | Satisfied | Existing conditional realtime integration retained; platform/transfer/accessibility gaps explicitly identified; no architecture changes |
 | We know what data can actually be used | Qualified | Downloadable official schedules support local analysis and technical routing feasibility; public-use terms and live features remain gated |
 
 ## Decision

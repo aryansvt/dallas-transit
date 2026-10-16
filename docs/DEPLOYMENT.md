@@ -1,9 +1,10 @@
 # LineFinder deployment and operations
 
-M9B is deployed at https://linefinder-dart.vercel.app. Render runs the native
+LineFinder is deployed at https://linefinder-dart.vercel.app. Render runs the native
 Node API in Ohio; Vercel serves the web app. DART realtime remains disabled.
-The settings below reconcile the owner's successful deployment. M9C changes are
-local until separately approved; no deployment is implied by this document.
+The settings below reconcile the owner's successful M9B deployment. Later work,
+including M9C and the arrive-by, insight and class schedule features, ships from
+`main` through the same settings.
 
 ## 1. Render project and database
 

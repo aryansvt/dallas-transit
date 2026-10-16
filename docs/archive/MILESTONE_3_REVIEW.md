@@ -30,7 +30,7 @@ and deterministic ordering. Its production imports are package-relative only.
 `workers/transit-ingest` owns the SQL loader and local validation CLI, reusing the
 Milestone 2 database schema and calendar function. No migrations or API changes
 were needed. Domain/shared/realtime packages and both applications are unchanged.
-See [ROUTING_CORE.md](ROUTING_CORE.md) for interfaces, reasoning, and complexity.
+See [ROUTING_CORE.md](../ROUTING_CORE.md) for interfaces, reasoning, and complexity.
 
 ## D. Dependencies added
 
