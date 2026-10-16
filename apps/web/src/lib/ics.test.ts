@@ -36,10 +36,9 @@ const only = (text: string): ClassSeries => {
   return classes[0]!;
 };
 const between = (series: ClassSeries, from: string, to: string) =>
-  occurrences(series, new Date(from), new Date(to)).map((o) => [
-    o.start.toISOString(),
-    o.end.toISOString(),
-  ]);
+  occurrences(series, new Date(from), new Date(to)).map(
+    (o): [string, string] => [o.start.toISOString(), o.end.toISOString()],
+  );
 const at = (time: string, ...lines: string[]) =>
   calendar(
     event(
