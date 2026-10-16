@@ -181,6 +181,11 @@ Negative:
 - rule 1 can suggest a small shift that saves 10 minutes when a slightly larger
   shift would save 25. Scanning the departures between `E - 1` and
   `T - MAX_EARLIER_SHIFT_SECONDS` is the upgrade path
+- the insight reuses the depart-at walking candidates, which are chosen for
+  service from the requested time on. An earlier option at a stop whose service
+  ends just before that time is not seen, so a hint can be missed but is never
+  wrong. Fetching candidates for the earlier window would change the main
+  journeys' candidates too, so it is left out
 - each depart-at request pays up to two arrive-by searches when `now` is known
 - under heavy CPU load the wall-time budget can drop an insight that would have
   been shown, so its presence is not deterministic in production

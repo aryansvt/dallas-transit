@@ -315,16 +315,15 @@ describe('V1 journey contract', () => {
       departureTime: 28749,
       arrivalChangeSeconds: 0,
     });
-    expect(await send({ departureTime: 28000 }, 28750)).not.toHaveProperty(
-      'departureInsight',
-    );
-    expect(
+    // planned normally, just without a hint
+    for (const quiet of [
+      await send({ departureTime: 28000 }, 28750),
       await send({ departureTime: 28000, earliestDepartureTime: 28750 }, 0),
-    ).not.toHaveProperty('departureInsight');
-    const { origin, destination, serviceDate } = apiFixture().request;
-    expect(
-      await send({ origin, destination, serviceDate, arrivalTime: 30700 }, 0),
-    ).not.toHaveProperty('departureInsight');
+      await send({ departureTime: undefined, arrivalTime: 30700 }, 0),
+    ]) {
+      expect(quiet.status).toBe('ok');
+      expect(quiet).not.toHaveProperty('departureInsight');
+    }
   });
   it('keeps the depart-at response free of arrive-by fields', async () => {
     const body = (await setup().send()).json();
