@@ -115,7 +115,10 @@ export function JourneySummary({
         {worst && (
           <>
             {' '}
-            <TransferTag level={worst} tightest={journey.transferCount > 1} />
+            <TransferTag
+              level={worst.level}
+              count={journey.transferCount > 1 ? worst.count : 0}
+            />
           </>
         )}
       </p>

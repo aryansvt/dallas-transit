@@ -33,10 +33,18 @@ export function transferLevel(risk: number | undefined): TransferLevel | null {
   if (risk === undefined) return null;
   return risk === 0 ? 'comfortable' : risk <= 180 ? 'tight' : 'risky';
 }
-/** The tightest connection, or null when the response has no per-leg risk. */
-export function worstTransfer(j: GeographicJourney): TransferLevel | null {
+/** The tightest connection and how many transfers share its level, or null
+ * when the response has no per-leg risk. The first boarding carries none. */
+export function worstTransfer(
+  j: GeographicJourney,
+): { level: TransferLevel; count: number } | null {
   const risks = transitLegs(j).flatMap((l) => l.scheduledTransferRisk ?? []);
-  return risks.length ? transferLevel(Math.max(...risks)) : null;
+  if (!risks.length) return null;
+  const level = transferLevel(Math.max(...risks))!;
+  return {
+    level,
+    count: risks.filter((r) => transferLevel(r) === level).length,
+  };
 }
 export const stopName = (refs: References, id: string) =>
   refs.stops.find((s) => s.stopId === id)?.name ?? 'Transit stop';

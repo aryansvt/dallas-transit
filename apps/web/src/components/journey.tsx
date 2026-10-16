@@ -116,18 +116,24 @@ const transferWords = {
 /** Scheduled connection confidence: an icon and a word, never color alone. */
 export function TransferTag({
   level,
-  tightest = false,
+  count = 0,
 }: {
   level: TransferLevel;
-  /** Several transfers: name the tightest. */
-  tightest?: boolean;
+  /** Several transfers: how many share this level, as "1 risky transfer". */
+  count?: number;
 }) {
   const [word, icon] = transferWords[level];
   return (
     <span className={`transfer-tag is-${level}`}>
       <Icon name={icon} />
-      {tightest ? `Tightest: ${word}` : word}
-      <span className="sr-only"> transfer</span>
+      {count ? (
+        `${count} ${word.toLowerCase()} transfer${count > 1 ? 's' : ''}`
+      ) : (
+        <>
+          {word}
+          <span className="sr-only"> transfer</span>
+        </>
+      )}
     </span>
   );
 }
@@ -263,7 +269,12 @@ export function RouteCard({
           <span className="secondary">
             Transfer at {stopName(references, rides[1].boardingStopId)}
           </span>
-          {worst && <TransferTag level={worst} tightest={rides.length > 2} />}
+          {worst && (
+            <TransferTag
+              level={worst.level}
+              count={rides.length > 2 ? worst.count : 0}
+            />
+          )}
         </span>
       )}
       {duringClass && (

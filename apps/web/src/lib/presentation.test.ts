@@ -115,8 +115,9 @@ it('words the router transfer shortfall and never invents one', () => {
   ]);
   expect(transferLevel(undefined)).toBeNull();
 });
-it('reports the tightest transfer of a journey', () => {
-  const journey = previewResponse().journeys[0]!;
+it('reports the tightest transfer of a journey and how many share it', () => {
+  // three rides: red, then two transfers
+  const journey = previewResponse(false, 'two-transfers').journeys[0]!;
   // each ride's risk in order; undefined means the response had none
   const withRisk = (...risks: (number | undefined)[]) => {
     let ride = 0;
@@ -134,8 +135,19 @@ it('reports the tightest transfer of a journey', () => {
       }),
     };
   };
-  expect(worstTransfer(withRisk(undefined, 120))).toBe('tight');
-  expect(worstTransfer(withRisk(undefined, 0))).toBe('comfortable');
+  expect(worstTransfer(withRisk(undefined, 120, 0))).toEqual({
+    level: 'tight',
+    count: 1,
+  });
+  expect(worstTransfer(withRisk(undefined, 0, 0))).toEqual({
+    level: 'comfortable',
+    count: 2,
+  });
+  // 300 and 200 are both risky, so both count
+  expect(worstTransfer(withRisk(undefined, 300, 200))).toEqual({
+    level: 'risky',
+    count: 2,
+  });
   // an older response without per-leg risk gets no label
-  expect(worstTransfer(withRisk(undefined, undefined))).toBeNull();
+  expect(worstTransfer(withRisk(undefined, undefined, undefined))).toBeNull();
 });

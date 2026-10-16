@@ -1410,9 +1410,6 @@ time {
 .detail-summary .transfer-tag.is-risky .icon {
   color: var(--ink);
 }
-.summary-metrics .transfer-tag {
-  margin-left: 6px;
-}
 .step-content .transfer-confidence {
   display: flex;
   flex-wrap: wrap;
@@ -1673,7 +1670,12 @@ time {
 .summary-duration .secondary {
   margin-top: 2px;
 }
+/* the tag sits after the text, or starts the next line flush left */
 .summary-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
   font-size: var(--text-body);
   font-weight: 600;
   margin-bottom: 16px;

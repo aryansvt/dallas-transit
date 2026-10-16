@@ -178,11 +178,14 @@ it('labels each transfer from router risk and never invents one', async () => {
   expect(container.textContent).toContain('Transfer at Akard Station');
   expect(container.textContent).not.toMatch(/comfortable|tight|risky/i);
 });
-it('names the tightest of several transfers and words each one in the steps', async () => {
+it('counts the tightest of several transfers and words each one in the steps', async () => {
   await render('transfers-detail');
   expect(
     container.querySelector('.summary-metrics .transfer-tag')?.textContent,
-  ).toBe('Tightest: Risky transfer');
+  ).toBe('1 risky transfer');
+  expect(
+    container.querySelector('.route-card .transfer-tag')?.textContent,
+  ).toBe('1 risky transfer');
   expect(
     [...container.querySelectorAll('.transfer-confidence')].map(
       (p) => p.textContent,
