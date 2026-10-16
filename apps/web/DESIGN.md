@@ -115,7 +115,8 @@ It must never look like DART. No DART logo or palette is used for chrome or iden
 - Hairline borders and tonal surfaces; shadows only on floating things
 - Square-cornered line badges colored by the feed, white-on-color or black-on-color by contrast
 - 48px minimum targets, 3px focus rings, safe-area aware
-- Sheets slide up with an ease-out drawer curve; everything honors reduced motion
+- Sheets slide up with an ease-out drawer curve; opening a trip rises the summary and staggers the steps (30ms)
+- Reduced motion keeps fades and color changes and drops movement
 
 ## Colors
 
@@ -163,6 +164,8 @@ Cool ink and warm paper with a bright amber that only appears on dark panels or 
 - **Body** (400 to 600, 17px, 1.45): default. Secondary text is 15px.
 - **Label** (700, 13px, 0.08em, uppercase): field labels, tags, "Get off".
 
+In `globals.css` every size is a `--text-*` token (label 13, secondary 15, body 17, field 18 for inputs and place names, title 22, headline 30, time 44, time-xl 64, display) and every radius a `--radius-*` token (xs 4, sm 8, md 12, control 14, lg 16, xl 20, sheet 24). Circles use 50%.
+
 ### Named Rules
 
 **The Tabular Time Rule.** Every time and duration uses tabular figures and never wraps.
@@ -196,7 +199,7 @@ Rounded but disciplined: 16 to 20px for cards and panels, 12 to 14px for control
 ### Cards / Containers
 
 - **Route card:** white, hairline, 16px radius. Large arrival time left, duration and tag right, line badges, "Board X at Y" with the stop in bold, then a "View journey" footer rule. Cards rise in with a 45ms stagger.
-- **Planner:** white 18px card with a dashed route track (amber origin, ink square destination).
+- **Planner:** white 20px card with a dashed route track (amber origin, ink square destination).
 - **State message:** white card with an ink icon tile, plain heading, one action.
 
 ### Inputs / Fields
@@ -214,6 +217,14 @@ Board Ink panel with destination, a 64px amber arrival time, duration at right, 
 ### Itinerary Timeline (signature)
 
 Ink rail for rides, dashed rail for walking, 34px dots. Times sit right in condensed bold. Transfers get an Amber Wash band. Arrival is a Board Ink card with an amber time.
+
+### Leave-By Board (signature)
+
+Arrive-by results open with a Board Ink panel: "Leave by" over a 64px amber time, a relative pill ("in 26 min", "6 min ago", or the date), then Arrive and Early by facts split by a board-line rule. A passed time is struck through and its pill turns amber. A leave time inside a class, or a passed one, adds an Amber Wash callout with an ink alert tile and one action ("Leave at 11:15 AM instead", "Leave now instead").
+
+### Transfer Tags
+
+Comfortable, Tight or Risky, from the router's scheduled shortfall per transfer (0, up to 180 s, above 180 s). Icon plus word, never color alone: check on Quiet Surface, clock on Amber Wash with Brass text, alert on Board Ink. On ink panels Risky takes the amber fill. Cards show the tightest; steps show each with its minutes to connect. No data, no tag.
 
 ### Sheets
 

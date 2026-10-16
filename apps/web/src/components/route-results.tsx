@@ -61,18 +61,16 @@ function LeaveBoard({
       className={`leave-board${late ? ' is-passed' : ''}`}
       aria-labelledby="leave-title"
     >
-      <div className="leave-top">
-        <h2 id="leave-title">
-          <span className="eyebrow">Leave by</span>{' '}
-          <span className="leave-time">
-            <JourneyTime
-              date={journey.serviceDate}
-              seconds={journey.requestedDepartureTime}
-            />
-          </span>
-        </h2>
-        <span className="leave-when">{fromNow(leave, now)}</span>
-      </div>
+      <h2 id="leave-title">
+        <span className="eyebrow">Leave by</span>{' '}
+        <span className="leave-time">
+          <JourneyTime
+            date={journey.serviceDate}
+            seconds={journey.requestedDepartureTime}
+          />
+        </span>
+      </h2>
+      <span className="leave-when">{fromNow(leave, now)}</span>
       <dl className="leave-facts">
         <div>
           <dt>Arrive</dt>
@@ -95,7 +93,7 @@ function LeaveBoard({
             <Icon name="alert" />
           </span>
           <p>This leave time has passed.</p>
-          <button className="secondary-button on-board" onClick={onLeaveNow}>
+          <button className="secondary-button" onClick={onLeaveNow}>
             Leave now instead
             <Icon name="arrow" />
           </button>
@@ -108,7 +106,7 @@ function LeaveBoard({
             </span>
             <p>{classWarning(during)}</p>
             <button
-              className="secondary-button on-board"
+              className="secondary-button"
               onClick={() =>
                 onPlanAt(
                   earliestLeave(

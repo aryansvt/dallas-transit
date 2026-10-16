@@ -285,6 +285,7 @@ export const scenarios = {
   transfers: '22 · Transfer confidence',
   'transfers-detail': '23 · Two transfers, step by step',
   'insight-later': '24 · Insight, no need to rush',
+  'arrive-worst': '25 · Arrive-by, worst-case data',
 } as const;
 export type Scenario = keyof typeof scenarios;
 // a fall 2026 timetable; one building has no official entrance yet
@@ -503,6 +504,51 @@ export function previewSetup(scenario: Scenario): PreviewSetup {
       data: previewResponse(false, 'two-transfers'),
       detail: 0,
     };
+  // planned the evening before, from a class with no campus room, with
+  // feed-length stop names and an hour to spare
+  if (scenario === 'arrive-worst') {
+    const arrive = arriveByResponse(32400, 0);
+    const named: Record<string, string> = {
+      akard: 'Commerce St @ N Ervay St - WB - NS',
+      paul: 'University of Texas at Dallas Station (Silver Line)',
+    };
+    return {
+      ...setup,
+      now: '2026-09-17T23:30:00Z',
+      destination: {
+        ...previewDestination,
+        name: 'Dallas Museum of Art, Center for Creative Connections and Family Experiences',
+      },
+      schedule: [
+        {
+          ...semester,
+          id: 'online',
+          title: 'UNIV 2020.HON Honors Colloquium',
+          location: 'Online via Microsoft Teams (link in eLearning)',
+          startTime: '07:00',
+          minutes: 80,
+          weekdays: [5],
+        },
+      ],
+      departure: {
+        mode: 'by',
+        date: '2026-09-18',
+        time: '10:00',
+        bufferMinutes: 0,
+      },
+      data: {
+        ...arrive,
+        requestedArrivalTime: 36000,
+        references: {
+          ...arrive.references,
+          stops: arrive.references.stops.map((stop) => ({
+            ...stop,
+            name: named[stop.stopId] ?? stop.name,
+          })),
+        },
+      },
+    };
+  }
   if (scenario === 'insight-later')
     return {
       ...setup,

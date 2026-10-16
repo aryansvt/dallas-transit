@@ -82,10 +82,10 @@ function TransferConfidence({
   const leg = journey.legs[ride];
   if (leg?.kind !== 'transit') return null;
   const level = transferLevel(leg.scheduledTransferRisk);
-  const prior = transitLegs({
-    ...journey,
-    legs: journey.legs.slice(0, ride),
-  }).at(-1);
+  const prior = journey.legs
+    .slice(0, ride)
+    .filter((l) => l.kind === 'transit')
+    .at(-1);
   if (!level || !prior) return null;
   return (
     <p className="transfer-confidence">
