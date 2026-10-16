@@ -6,6 +6,10 @@
 > pedestrian links, total walking accounting, service-aware endpoint shortlists,
 > up to six accepted endpoints per side, sixteen provider calls and 36 pair searches.
 > The remaining text preserves the original milestone rationale and CLI history.
+> Arrive-by planning adds `latestDepartures` (a reverse latest-departure pass)
+> and `routeWindow` (range RAPTOR over departure instants); see
+> [ADR 0006](adr/0006-arrive-by-departure-window-search.md). `routeToStops` is
+> the same search with one departure.
 
 Milestone 3 implements stop-to-stop scheduled journeys in `packages/router`.
 The package has **no production dependencies**. It owns the immutable schedule,

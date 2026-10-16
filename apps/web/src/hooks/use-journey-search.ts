@@ -6,7 +6,7 @@ import type {
   JourneyResponse,
 } from '@dallas-transit/shared';
 import { errorMessage, type TransitClient } from '../lib/api';
-import type { PreviewSetup } from '../components/transit-app';
+import type { PreviewSetup } from '../lib/preview-setup';
 
 /** One search session: request, results, selection and replanned options. */
 export function useJourneySearch(

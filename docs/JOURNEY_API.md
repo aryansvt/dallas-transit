@@ -1,5 +1,42 @@
 # Journey API V1
 
+## Arrive-by contract update
+
+`POST /v1/journeys` also plans "arrive by" trips. Send `arrivalTime` instead of
+`departureTime`; exactly one of the two is required. Both use integer service-day
+seconds. Optional `arrivalBufferMinutes` (integer 0-60, default 0) asks to arrive
+that much early and is only valid with `arrivalTime`. Sending both times, neither
+time, or a buffer with `departureTime` returns `400 INVALID_REQUEST`.
+
+```json
+{
+  "origin": { "latitude": 32.9932, "longitude": -96.7492 },
+  "destination": { "latitude": 32.9503, "longitude": -96.8206 },
+  "serviceDate": "2026-09-18",
+  "arrivalTime": 32400,
+  "arrivalBufferMinutes": 8
+}
+```
+
+Arrive-by responses replace `requestedDepartureTime` in the top-level context with
+`requestedArrivalTime` and `arrivalBufferMinutes`. Depart-at responses are
+unchanged. Each arrive-by journey keeps every V1 journey field. Its
+`requestedDepartureTime` is that journey's own latest leave time (first boarding
+minus access walk, whole seconds), and its duration has no initial wait. Journeys
+arrive by `arrivalTime - buffer`, and arriving exactly then counts. They are
+ordered by latest leave time, then fewer transfers, less walking and lower
+scheduled risk, with up to three results as in M9C. No-journey reasons are
+unchanged. An effective deadline before 00:00 returns `transit-unreachable`,
+since adjacent service days are not stitched.
+
+Server budgets: the latest leave time is searched over the whole service day.
+Alternatives leave at most one hour before it. At most four departure instants
+are scanned per access stop (24 per request), plus one reverse latest-departure
+pass, and one more per access stop that is also an egress candidate. Request logs
+include `windowDepartures`. The design, the measurements and the rejected
+alternatives are in
+[ADR 0006](adr/0006-arrive-by-departure-window-search.md).
+
 ## M9C contract update
 
 Journey walking totals now include validated pedestrian interchanges. Optional

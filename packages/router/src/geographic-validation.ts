@@ -1,7 +1,9 @@
 import { DEFAULT_MAX_TRANSFERS } from './route.js';
 import { integer, serviceDate } from './validation.js';
 import type {
+  ArriveByRequest,
   Coordinate,
+  DepartAtRequest,
   GeographicPolicy,
   GeographicRequest,
   WalkingRoute,
@@ -20,6 +22,8 @@ export const DEFAULT_GEOGRAPHIC_POLICY: GeographicPolicy = Object.freeze({
   providerTimeoutMs: 5000,
   maxTransitSearches: 36,
   maxJourneys: 3,
+  arriveByWindowSeconds: 3600,
+  maxWindowDepartures: 4,
 });
 
 export function validateCoordinate(
@@ -65,11 +69,42 @@ export function validateWalkingRoute(
       );
 }
 
+export function isArriveBy(
+  request: GeographicRequest,
+): request is ArriveByRequest {
+  return (request as Partial<ArriveByRequest>).arrivalTime !== undefined;
+}
+
+/** Earliest time worth searching, and the effective arrival deadline. Arrive-by
+ * searches the whole service day: the latest option may leave hours early when
+ * service is sparse, and a later deadline must never lose it. */
+export function departureWindow(request: GeographicRequest): {
+  readonly earliest: number;
+  readonly deadline: number;
+} {
+  return isArriveBy(request)
+    ? {
+        earliest: 0,
+        deadline: request.arrivalTime - (request.arrivalBufferSeconds ?? 0),
+      }
+    : { earliest: request.departureTime, deadline: Infinity };
+}
+
 export function validateGeographicRequest(request: GeographicRequest): void {
   validateCoordinate(request.origin);
   validateCoordinate(request.destination);
   serviceDate(request.serviceDate);
-  integer(request.departureTime, 'departureTime');
+  const loose = request as Partial<DepartAtRequest & ArriveByRequest>;
+  if (isArriveBy(request)) {
+    if (loose.departureTime !== undefined)
+      throw new Error('Use departureTime or arrivalTime, not both');
+    integer(request.arrivalTime, 'arrivalTime');
+    integer(request.arrivalBufferSeconds ?? 0, 'arrivalBufferSeconds', 86400);
+  } else {
+    if (loose.arrivalBufferSeconds !== undefined)
+      throw new Error('arrivalBufferSeconds needs arrivalTime');
+    integer(request.departureTime, 'departureTime');
+  }
   // A service-facing budget in addition to the core's independently overridable limit.
   integer(request.maxTransfers ?? DEFAULT_MAX_TRANSFERS, 'maxTransfers', 8);
 }
@@ -91,6 +126,8 @@ export function geographicPolicy(
     providerTimeoutMs: 30000,
     maxTransitSearches: 256,
     maxJourneys: 10,
+    arriveByWindowSeconds: 14400,
+    maxWindowDepartures: 16,
   };
   for (const key of Object.keys(maxima) as (keyof GeographicPolicy)[]) {
     integer(policy[key]!, key, maxima[key]!);

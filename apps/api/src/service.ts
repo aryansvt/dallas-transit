@@ -2,7 +2,7 @@ import {
   planGeographicJourney,
   type WalkingProvider,
 } from '@dallas-transit/transit-ingest/runtime';
-import type { GeographicRequest } from '@dallas-transit/router';
+import { isArriveBy, type GeographicRequest } from '@dallas-transit/router';
 import {
   adjustedSchedule,
   scheduledBase,
@@ -28,6 +28,8 @@ export interface JourneyObservation {
   stage?: 'candidates' | 'walking' | 'composition' | 'complete';
   providerCalls?: number;
   completedAccessSearches?: number;
+  /** Arrive-by forward window runs; the budget is API_POLICY.maxWindowDepartures per access. */
+  windowDepartures?: number;
 }
 export class JourneyService {
   readonly schedules: PreparedSchedules;
@@ -93,6 +95,9 @@ export class JourneyService {
             result.metrics.originLookupMs + result.metrics.destinationLookupMs,
           providerMs: result.metrics.providerBatchMs,
           compositionMs: result.metrics.compositionMs,
+          ...(result.metrics.windowDepartures === undefined
+            ? {}
+            : { windowDepartures: result.metrics.windowDepartures }),
         });
         const failedWalk = result.walkingAttempts.find(
           (a) => a.result.status === 'unavailable',
@@ -104,7 +109,12 @@ export class JourneyService {
           serviceDate: request.serviceDate,
           origin: request.origin,
           destination: request.destination,
-          requestedDepartureTime: request.departureTime,
+          ...(isArriveBy(request)
+            ? {
+                requestedArrivalTime: request.arrivalTime,
+                arrivalBufferMinutes: (request.arrivalBufferSeconds ?? 0) / 60,
+              }
+            : { requestedDepartureTime: request.departureTime }),
         };
         if (result.status === 'ok') {
           const baseJourneys = realtime

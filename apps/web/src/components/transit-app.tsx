@@ -2,9 +2,9 @@
 import { useMemo, useRef, useState } from 'react';
 import type { StyleSpecification } from 'maplibre-gl';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import type { JourneyResponse, Place } from '@dallas-transit/shared';
+import type { Place } from '@dallas-transit/shared';
 import { liveClient, type TransitClient } from '../lib/api';
-import { addRecent, type LocalPlaces } from '../lib/local-places';
+import { addRecent } from '../lib/local-places';
 import { journeyPoints } from '../lib/map-points';
 import { departureAt, leaveNow, dallasParts, shiftDate } from '../lib/time';
 import { useJourneySearch } from '../hooks/use-journey-search';
@@ -20,17 +20,7 @@ import { PlannerForm } from './planner-form';
 import { RouteResults } from './route-results';
 import { JourneySummary } from './journey-summary';
 import { LocalPlaceList } from './local-place-list';
-export interface PreviewSetup {
-  origin: Place | null;
-  destination: Place | null;
-  data?: JourneyResponse;
-  detail?: number;
-  search?: boolean;
-  loading?: boolean;
-  error?: string;
-  expanded?: boolean;
-  saved?: LocalPlaces;
-}
+import type { PreviewSetup } from '../lib/preview-setup';
 export function TransitApp({
   client = liveClient,
   preview,

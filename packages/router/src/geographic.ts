@@ -1,7 +1,10 @@
-import { routeToStops } from './route.js';
+import { latestDepartures } from './latest-departures.js';
+import { routeToStops, routeWindow } from './route.js';
 import { compareIds, integer } from './validation.js';
 import {
+  departureWindow,
   geographicPolicy,
+  isArriveBy,
   sameCoordinate,
   validateGeographicRequest,
   validateCoordinate,
@@ -14,11 +17,13 @@ import type {
   GeographicRequest,
   WalkingCandidate,
 } from './geographic-types.js';
-import type { RoutingSchedule } from './types.js';
+import type { RoutingResult, RoutingSchedule } from './types.js';
 
 /** Pure composition: walking routes have already been obtained and validated.
  * Each access candidate has an independent search shared across egress targets.
  * Never merge access labels before transit search: later access can mean less walk.
+ * Arrive-by: one reverse pass finds each access stop's latest departure per ride
+ * count, then a forward window search from just those instants builds journeys.
  */
 export function composeGeographicJourneys(
   schedule: RoutingSchedule,
@@ -68,7 +73,7 @@ export function composeGeographicJourneys(
         throw new Error(
           'Walking candidate endpoints do not match request/stop',
         );
-      if (phase === 'access')
+      if (phase === 'access' && !isArriveBy(request))
         integer(
           Math.ceil(request.departureTime + candidate.walk.durationSeconds),
           'access arrival',
@@ -85,35 +90,120 @@ export function composeGeographicJourneys(
     status: 'no-journey',
     reason,
     transitSearches,
+    ...(arriveBy ? { windowDepartures } : {}),
   });
+  const arriveBy = isArriveBy(request);
+  let windowDepartures = 0;
   if (schedule.serviceDate !== request.serviceDate)
     return none('service-date-not-loaded');
   if (!access.length) return none('no-reachable-access-stops');
   if (!egress.length) return none('no-reachable-egress-stops');
+  const { earliest, deadline } = departureWindow(request);
+  // the reverse seed doubles as the forward filter: one predicate for both
+  const egressDeadline = new Map(
+    egress.map((e) => [e.stopId, deadline - e.walk.durationSeconds]),
+  );
+  const transfers =
+    request.maxTransfers === undefined
+      ? {}
+      : { maxTransfers: request.maxTransfers };
+  const bounds = (originStopIds: string[], targets: WalkingCandidate[]) =>
+    latestDepartures(schedule, {
+      serviceDate: request.serviceDate,
+      originStopIds,
+      targets: targets.map((e) => ({
+        stopId: e.stopId,
+        arrivalDeadline: egressDeadline.get(e.stopId)!,
+      })),
+      ...transfers,
+    });
+  // per access: latest departure for each ride count, never before 00:00
+  const latest = new Map<string, number[]>();
+  // an effective deadline before 00:00 belongs to the previous service day
+  if (arriveBy && deadline >= 0) {
+    const shared = bounds(
+      access.map((a) => a.stopId),
+      [...egress],
+    );
+    for (const a of access) {
+      const targets = egress.filter((e) => e.stopId !== a.stopId);
+      if (!targets.length) continue;
+      // the forward search never routes a stop to itself, so neither may this
+      const values = (
+        targets.length === egress.length ? shared : bounds([a.stopId], targets)
+      ).get(a.stopId)!;
+      latest.set(
+        a.stopId,
+        values.filter(
+          (t): t is number =>
+            t !== null && t - a.walk.durationSeconds >= earliest,
+        ),
+      );
+    }
+  }
+  // alternatives leave at most the window before the latest option overall
+  const cutoff =
+    Math.max(
+      ...access.flatMap((a) =>
+        (latest.get(a.stopId) ?? []).map((t) => t - a.walk.durationSeconds),
+      ),
+    ) - policy.arriveByWindowSeconds!;
   let transitSearches = 0;
   const composed: GeographicJourney[] = [];
   let completedAccessSearches = 0;
   for (const a of access) {
     const targets = egress.filter((e) => e.stopId !== a.stopId);
-    const results = routeToStops(
-      schedule,
-      {
-        serviceDate: request.serviceDate,
-        originStopId: a.stopId,
-        departureTime: Math.ceil(
-          request.departureTime + a.walk.durationSeconds,
+    let results: ReadonlyMap<string, RoutingResult> | undefined;
+    if (!arriveBy)
+      results = routeToStops(
+        schedule,
+        {
+          serviceDate: request.serviceDate,
+          originStopId: a.stopId,
+          departureTime: Math.ceil(
+            request.departureTime + a.walk.durationSeconds,
+          ),
+          ...transfers,
+        },
+        targets.map((e) => e.stopId),
+      );
+    else if (latest.has(a.stopId)) {
+      const departureTimes = [
+        ...new Set(
+          latest
+            .get(a.stopId)!
+            .filter((t) => t - a.walk.durationSeconds >= cutoff),
         ),
-        ...(request.maxTransfers === undefined
-          ? {}
-          : { maxTransfers: request.maxTransfers }),
-      },
-      targets.map((e) => e.stopId),
-    );
-    for (const e of targets) {
+      ]
+        .sort((x, y) => y - x)
+        .slice(0, policy.maxWindowDepartures);
+      windowDepartures += departureTimes.length;
+      if (departureTimes.length)
+        results = routeWindow(
+          schedule,
+          {
+            serviceDate: request.serviceDate,
+            originStopId: a.stopId,
+            departureTimes,
+            arrivalDeadline: Math.max(
+              ...targets.map((e) => egressDeadline.get(e.stopId)!),
+            ),
+            ...transfers,
+          },
+          targets.map((e) => e.stopId),
+        );
+    }
+    for (const e of results ? targets : []) {
       transitSearches++; // logical pairs; timetable scanning is shared per access
-      const result = results.get(e.stopId)!;
+      const result = results!.get(e.stopId)!;
       if (result.status !== 'ok') continue;
       for (const transit of result.journeys) {
+        if (arriveBy && transit.arrivalTime > egressDeadline.get(e.stopId)!)
+          continue;
+        // arrive-by: be at the stop by the first boarding, whole seconds early
+        const leave = arriveBy
+          ? Math.floor(transit.requestedDepartureTime - a.walk.durationSeconds)
+          : request.departureTime;
         const arrivalTime = transit.arrivalTime + e.walk.durationSeconds;
         if (!Number.isSafeInteger(Math.ceil(arrivalTime)))
           throw new Error('Journey time overflow');
@@ -124,9 +214,9 @@ export function composeGeographicJourneys(
           destination: request.destination,
           accessStopId: a.stopId,
           egressStopId: e.stopId,
-          requestedDepartureTime: request.departureTime,
+          requestedDepartureTime: leave,
           arrivalTime,
-          durationSeconds: arrivalTime - request.departureTime,
+          durationSeconds: arrivalTime - leave,
           boardingCount: transit.boardingCount,
           transferCount: transit.transferCount,
           walkingDurationSeconds:
@@ -152,8 +242,8 @@ export function composeGeographicJourneys(
               kind: 'walk',
               phase: 'access',
               stopId: a.stopId,
-              departureTime: request.departureTime,
-              arrivalTime: request.departureTime + a.walk.durationSeconds,
+              departureTime: leave,
+              arrivalTime: leave + a.walk.durationSeconds,
             },
             ...transit.legs,
             {
@@ -172,12 +262,15 @@ export function composeGeographicJourneys(
   }
   // Pareto filtering retains a later arrival if it saves transfers or walking.
   // The walking criterion is duration only; distance is reported, not scored.
+  // Arrive-by mirrors the order: leaving later takes the place of arriving earlier.
+  const primary = (j: GeographicJourney) =>
+    arriveBy ? -j.requestedDepartureTime : j.arrivalTime;
   const dominates = (a: GeographicJourney, b: GeographicJourney) =>
-    a.arrivalTime <= b.arrivalTime &&
+    primary(a) <= primary(b) &&
     a.transferCount <= b.transferCount &&
     a.walkingDurationSeconds <= b.walkingDurationSeconds &&
     (a.scheduledTransferRisk ?? 0) <= (b.scheduledTransferRisk ?? 0) &&
-    (a.arrivalTime < b.arrivalTime ||
+    (primary(a) < primary(b) ||
       a.transferCount < b.transferCount ||
       a.walkingDurationSeconds < b.walkingDurationSeconds ||
       (a.scheduledTransferRisk ?? 0) < (b.scheduledTransferRisk ?? 0));
@@ -185,10 +278,11 @@ export function composeGeographicJourneys(
     JSON.stringify([j.accessStopId, j.egressStopId, j.legs]);
   composed.sort(
     (a, b) =>
-      a.arrivalTime - b.arrivalTime ||
+      primary(a) - primary(b) ||
       a.transferCount - b.transferCount ||
       a.walkingDurationSeconds - b.walkingDurationSeconds ||
       (a.scheduledTransferRisk ?? 0) - (b.scheduledTransferRisk ?? 0) ||
+      a.arrivalTime - b.arrivalTime ||
       compareIds(key(a), key(b)),
   );
   // Endpoint variants of the same actual rides are one rider journey. Different
@@ -232,6 +326,11 @@ export function composeGeographicJourneys(
     return selected.has(j);
   });
   return journeys.length
-    ? { status: 'ok', journeys, transitSearches }
+    ? {
+        status: 'ok',
+        journeys,
+        transitSearches,
+        ...(arriveBy ? { windowDepartures } : {}),
+      }
     : none('transit-unreachable', transitSearches);
 }

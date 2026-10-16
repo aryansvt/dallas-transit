@@ -1,7 +1,12 @@
 import { expect, it } from 'vitest';
-import { buildSchedule, routeToStops } from './index.js';
+import { routeToStops } from './index.js';
 import type { RoutingSchedule } from './index.js';
-import { assertJourney, input, query, trip, visit } from './test-support.js';
+import {
+  assertJourney,
+  query,
+  randomSchedule,
+  seededRandom,
+} from './test-support.js';
 
 /** Test-only exhaustive ride enumeration: no pattern scans or earliest-label pruning.
  * Link shortest paths are computed by independent bounded Bellman-Ford relaxation.
@@ -104,49 +109,9 @@ function uniqueMetrics(values: number[][]) {
 }
 
 it('matches exhaustive Pareto enumeration and itinerary invariants on 160 deterministic small networks', () => {
-  let state = 739391;
-  const random = (n: number) => {
-    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
-    return Math.floor((state / 4294967296) * n);
-  };
-  const stops = ['A', 'B', 'C', 'D'];
+  const random = seededRandom(739391);
   for (let fixture = 0; fixture < 160; fixture++) {
-    const trips = Array.from({ length: 5 }, (_, i) => {
-      let time = 90 + random(100);
-      return trip(`trip-${i}`, [], [], {
-        routeId: `route-${random(2)}`,
-        serviceId: random(5) === 0 ? 'inactive' : 'weekday',
-        events: Array.from({ length: 2 + random(3) }, (_, j) => {
-          time += random(35);
-          const arrival = time;
-          time += random(5);
-          return visit(stops[random(4)]!, arrival, j * 3, {
-            departure: time,
-            pickup: random(7) === 0 ? 1 : 0,
-            dropOff: random(7) === 0 ? 1 : 0,
-          });
-        }),
-      });
-    });
-    const schedule = buildSchedule(
-      input(trips, {
-        stops: stops.map((id) => ({ id, changeSeconds: random(6) })),
-        transfers: Array.from({ length: 3 }, (_, i) => ({
-          id: `link-${i}`,
-          fromStopId: stops[random(4)]!,
-          toStopId: stops[random(4)]!,
-          durationSeconds: random(8),
-          ...(random(2)
-            ? {
-                pedestrian: {
-                  distanceMeters: random(20),
-                  provenance: 'synthetic',
-                },
-              }
-            : {}),
-        })),
-      }),
-    );
+    const schedule = randomSchedule(random);
     for (const departureTime of [90, 140, 200]) {
       const result = query(schedule, { departureTime, maxTransfers: 2 });
       const actual =

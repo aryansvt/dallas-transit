@@ -7,7 +7,7 @@ import type {
   TransitLeg,
 } from '@dallas-transit/shared';
 import { ClientError, errorMessage, type TransitClient } from '../lib/api';
-import type { PreviewSetup } from '../components/transit-app';
+import type { PreviewSetup } from '../lib/preview-setup';
 
 // Original synthetic presentation fixtures. Names provide Dallas context; times,
 // connections and coordinates are examples, not travel advice or copied feed rows.

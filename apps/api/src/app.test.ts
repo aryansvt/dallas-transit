@@ -235,6 +235,79 @@ describe('V1 journey contract', () => {
       arrivalTime: 87640.5,
     });
   });
+  it('plans arrive-by journeys that leave as late as possible', async () => {
+    const f = setup();
+    const { origin, destination, serviceDate } = f.request;
+    const place = { origin, destination, serviceDate };
+    const response = await f.send({ ...place, arrivalTime: 30700 });
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body).toMatchObject({
+      status: 'ok',
+      requestedArrivalTime: 30700,
+      arrivalBufferMinutes: 0,
+    });
+    expect(body).not.toHaveProperty('requestedDepartureTime');
+    // the transfer leaves at the same time but costs a transfer
+    expect(body.journeys).toHaveLength(1);
+    expect(body.journeys[0]).toMatchObject({
+      requestedDepartureTime: 28869,
+      arrivalTime: 30640.5,
+      transferCount: 0,
+    });
+    expect(body.journeys[0].legs[0]).toMatchObject({
+      phase: 'access',
+      departureTime: 28869,
+      arrivalTime: 28899.25,
+    });
+    expect(body.liveJourneyIds).toHaveLength(1);
+    // one minute early rules out the direct ride arriving at 30640.5
+    const buffered = (
+      await f.send({ ...place, arrivalTime: 30700, arrivalBufferMinutes: 1 })
+    ).json();
+    expect(buffered).toMatchObject({ arrivalBufferMinutes: 1 });
+    expect(buffered.journeys[0]).toMatchObject({
+      arrivalTime: 30040.5,
+      transferCount: 1,
+    });
+    expect((await f.send({ ...place, arrivalTime: 29000 })).json()).toEqual({
+      status: 'no-journey',
+      publicationId: f.schedule.publicationId,
+      serviceDate: '2026-09-18',
+      origin: f.request.origin,
+      destination: f.request.destination,
+      requestedArrivalTime: 29000,
+      arrivalBufferMinutes: 0,
+      incomplete: false,
+      journeys: [],
+      reason: 'transit-unreachable',
+    });
+  });
+  it('keeps the depart-at response free of arrive-by fields', async () => {
+    const body = (await setup().send()).json();
+    expect(body.requestedDepartureTime).toBe(28800);
+    expect(body).not.toHaveProperty('requestedArrivalTime');
+    expect(body).not.toHaveProperty('arrivalBufferMinutes');
+  });
+  it.each([
+    { arrivalTime: 30700 },
+    { departureTime: undefined },
+    { arrivalBufferMinutes: 5 },
+    { departureTime: undefined, arrivalBufferMinutes: 5 },
+    { departureTime: undefined, arrivalTime: 30700, arrivalBufferMinutes: 61 },
+    { departureTime: undefined, arrivalTime: 30700, arrivalBufferMinutes: -1 },
+    { departureTime: undefined, arrivalTime: 30700, arrivalBufferMinutes: 1.5 },
+    { departureTime: undefined, arrivalTime: '08:00:00' },
+    { departureTime: undefined, arrivalTime: -1 },
+    { departureTime: undefined, arrivalTime: 2147483648 },
+  ])('rejects ambiguous or invalid time modes: %j', async (change) => {
+    const f = setup();
+    const load = vi.spyOn(f.repository, 'publication');
+    const response = await f.send({ ...f.request, ...change });
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.code).toBe('INVALID_REQUEST');
+    expect(load).not.toHaveBeenCalled();
+  });
   it.each([
     { origin: { latitude: 91, longitude: -96 } },
     { origin: { latitude: '32', longitude: -96 } },

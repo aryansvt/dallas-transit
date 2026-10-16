@@ -20,14 +20,26 @@ export interface WalkingCandidate {
   readonly walk: WalkingRoute;
 }
 
-export interface GeographicRequest {
+interface GeographicRequestBase {
   readonly origin: Coordinate;
   readonly destination: Coordinate;
   readonly serviceDate: string;
-  /** Integer seconds from the service-day start, never modulo 86400. */
-  readonly departureTime: number;
   readonly maxTransfers?: number;
 }
+
+export interface DepartAtRequest extends GeographicRequestBase {
+  /** Integer seconds from the service-day start, never modulo 86400. */
+  readonly departureTime: number;
+}
+
+export interface ArriveByRequest extends GeographicRequestBase {
+  /** Latest acceptable arrival, service-day seconds like departureTime. */
+  readonly arrivalTime: number;
+  /** Arrive at least this early; the deadline is arrivalTime minus this. */
+  readonly arrivalBufferSeconds?: number;
+}
+
+export type GeographicRequest = DepartAtRequest | ArriveByRequest;
 
 export interface GeographicPolicy {
   readonly radiusMeters: number;
@@ -43,6 +55,10 @@ export interface GeographicPolicy {
   readonly providerTimeoutMs: number;
   readonly maxTransitSearches: number;
   readonly maxJourneys: number;
+  /** Arrive-by alternatives leave at most this long before the latest option. */
+  readonly arriveByWindowSeconds?: number;
+  /** Arrive-by departure instants scanned per access stop. */
+  readonly maxWindowDepartures?: number;
 }
 
 export interface WalkingLeg extends WalkingRoute {
@@ -80,6 +96,8 @@ export type GeographicCompositionResult =
       readonly status: 'ok';
       readonly journeys: readonly GeographicJourney[];
       readonly transitSearches: number;
+      /** Arrive-by only: forward runs across all access stops. */
+      readonly windowDepartures?: number;
     }
   | {
       readonly status: 'no-journey';
@@ -89,4 +107,5 @@ export type GeographicCompositionResult =
         | 'no-reachable-egress-stops'
         | 'transit-unreachable';
       readonly transitSearches: number;
+      readonly windowDepartures?: number;
     };
