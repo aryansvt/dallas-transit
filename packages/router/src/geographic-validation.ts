@@ -102,12 +102,15 @@ export function validateGeographicRequest(request: GeographicRequest): void {
   if (isArriveBy(request)) {
     if (loose.departureTime !== undefined)
       throw new Error('Use departureTime or arrivalTime, not both');
+    if (loose.earliestDepartureTime !== undefined)
+      throw new Error('earliestDepartureTime needs departureTime');
     integer(request.arrivalTime, 'arrivalTime');
     integer(request.arrivalBufferSeconds ?? 0, 'arrivalBufferSeconds', 86400);
   } else {
     if (loose.arrivalBufferSeconds !== undefined)
       throw new Error('arrivalBufferSeconds needs arrivalTime');
     integer(request.departureTime, 'departureTime');
+    integer(request.earliestDepartureTime ?? 0, 'earliestDepartureTime');
   }
   // A service-facing budget in addition to the core's independently overridable limit.
   integer(request.maxTransfers ?? DEFAULT_MAX_TRANSFERS, 'maxTransfers', 8);

@@ -30,6 +30,9 @@ interface GeographicRequestBase {
 export interface DepartAtRequest extends GeographicRequestBase {
   /** Integer seconds from the service-day start, never modulo 86400. */
   readonly departureTime: number;
+  /** Departure-time insight never suggests leaving before this. The journeys
+   * themselves ignore it. */
+  readonly earliestDepartureTime?: number;
 }
 
 export interface ArriveByRequest extends GeographicRequestBase {
@@ -89,6 +92,15 @@ export interface GeographicJourney {
   /** Scheduled slack shortfall, not a probability or live confidence. */
   readonly scheduledTransferRisk?: number;
   readonly legs: readonly (WalkingLeg | JourneyLeg)[];
+}
+
+/** A secondary hint beside depart-at journeys; it never replaces them. */
+export interface DepartureInsight {
+  readonly kind: 'leave-earlier' | 'no-rush';
+  /** Suggested leave time, service-day seconds, boarding margin included. */
+  readonly departureTime: number;
+  /** Arrival when leaving then, minus the first journey's; negative is sooner. */
+  readonly arrivalChangeSeconds: number;
 }
 
 export type GeographicCompositionResult =
