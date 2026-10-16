@@ -1,5 +1,48 @@
 # Journey API V1
 
+## Departure-time insight contract update
+
+A depart-at request may send optional `earliestDepartureTime` (integer
+service-day seconds), only with `departureTime`. It limits the insight below and
+changes nothing else. Sending it with `arrivalTime` returns `400
+INVALID_REQUEST`.
+
+An `ok` depart-at response may carry a secondary hint beside the journeys:
+
+```json
+"departureInsight": {
+  "kind": "leave-earlier",
+  "departureTime": 57480,
+  "arrivalChangeSeconds": -1080
+}
+```
+
+`departureTime` is the suggested leave time in service-day seconds, with the
+two-minute boarding margin already included. `arrivalChangeSeconds` is the
+arrival when leaving then minus the first journey's arrival: negative is sooner.
+
+- `leave-earlier`: the latest leave that arrives at least 10 minutes sooner,
+  when it is at most 15 minutes before `requestedDepartureTime`.
+- `no-rush`: otherwise, the latest leave that arrives within 2 minutes of the
+  first journey, when it is at least 5 minutes after `requestedDepartureTime`.
+
+There is at most one hint, and none for arrive-by. No hint leaves before the
+server's current time on the service date (America/Chicago) or before
+`earliestDepartureTime`, so a past service date never gets one. The field is
+optional: the journeys are planned first and do not depend on it, and the
+server drops the hint, not the journeys, if it takes more than 250 ms. When live
+data adjusted the search, the hint is computed on that same adjusted timetable.
+
+Clients write the copy. For example, with `requestedDepartureTime` 4:05 PM:
+
+- `leave-earlier`, 57480, -1080: "Worth leaving earlier: depart 3:58 PM instead
+  of 4:05 PM, arrive 18 min sooner"
+- `no-rush`, 58380, 60: "No need to rush: leaving 8 min later arrives at nearly
+  the same time"
+
+Request logs include `insightMs`. The rules, guardrail constants and budget are
+in [ADR 0007](adr/0007-departure-time-insight.md).
+
 ## Arrive-by contract update
 
 `POST /v1/journeys` also plans "arrive by" trips. Send `arrivalTime` instead of
@@ -21,8 +64,10 @@ time, or a buffer with `departureTime` returns `400 INVALID_REQUEST`.
 Arrive-by responses replace `requestedDepartureTime` in the top-level context with
 `requestedArrivalTime` and `arrivalBufferMinutes`. Depart-at responses are
 unchanged. Each arrive-by journey keeps every V1 journey field. Its
-`requestedDepartureTime` is that journey's own latest leave time (first boarding
-minus access walk, whole seconds), and its duration has no initial wait. Journeys
+`requestedDepartureTime` is that journey's own latest leave time: first boarding
+minus access walk minus a two-minute boarding margin, in whole seconds. The rider
+reaches the first stop two minutes before the vehicle leaves. Its duration
+includes that wait and no other initial wait. Depart-at journeys have no margin. Journeys
 arrive by `arrivalTime - buffer`, and arriving exactly then counts. They are
 ordered by latest leave time, then fewer transfers, less walking and lower
 scheduled risk, with up to three results as in M9C. No-journey reasons are

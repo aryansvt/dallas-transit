@@ -1,9 +1,12 @@
 import { performance } from 'node:perf_hooks';
 import {
   composeGeographicJourneys,
+  departureInsight,
   geographicPolicy,
+  isArriveBy,
   validateCoordinate,
   validateGeographicRequest,
+  type DepartureInsight,
   type GeographicCompositionResult,
   type GeographicPolicy,
   type GeographicRequest,
@@ -29,6 +32,8 @@ export interface PlanningMetrics {
   /** Arrive-by only: forward window runs across access stops. */
   windowDepartures?: number;
   compositionMs: number;
+  /** Departure-time insight, when it ran; separate from compositionMs. */
+  insightMs?: number;
   totalMs: number;
 }
 export interface PlanningProgress {
@@ -60,9 +65,15 @@ export type GeographicPlanningResult = {
   /** Provider failure may hide a better journey even when usable journeys remain. */
   readonly incomplete: boolean;
 } & (
-  | Extract<GeographicCompositionResult, { status: 'ok' }>
+  | (Extract<GeographicCompositionResult, { status: 'ok' }> & {
+      readonly departureInsight?: DepartureInsight;
+    })
   | { readonly status: 'no-journey'; readonly reason: NoJourneyReason }
 );
+
+/** The insight is a hint: past this much wall time the journeys go without it. */
+export const DEPARTURE_INSIGHT_BUDGET_MS = 250;
+const overBudget = new Error('departure insight over budget');
 
 /** Application orchestration only: the transit core never calls these providers. */
 export async function planGeographicJourney(
@@ -75,6 +86,9 @@ export async function planGeographicJourney(
     /** Aggregate-only checkpoints, including before cancellation is rethrown. */
     readonly onProgress?: (progress: PlanningProgress) => void;
     readonly checkpoint?: () => void;
+    /** Service-day seconds. Enables departure-time insight, which never
+     * suggests leaving before it. */
+    readonly now?: number;
   },
   overrides: Partial<GeographicPolicy> = {},
 ): Promise<GeographicPlanningResult> {
@@ -124,7 +138,9 @@ export async function planGeographicJourney(
   try {
     const finish = (
       result:
-        | GeographicCompositionResult
+        | (GeographicCompositionResult & {
+            departureInsight?: DepartureInsight;
+          })
         | { status: 'no-journey'; reason: NoJourneyReason },
     ): GeographicPlanningResult => {
       metrics.totalMs = performance.now() - started;
@@ -375,7 +391,34 @@ export async function planGeographicJourney(
         status: 'no-journey',
         reason: 'walking-provider-unavailable',
       });
-    return finish(result);
+    if (
+      result.status !== 'ok' ||
+      isArriveBy(request) ||
+      dependencies.now === undefined
+    )
+      return finish(result);
+    const insightStarted = performance.now();
+    let insight: DepartureInsight | undefined;
+    try {
+      insight = departureInsight(
+        schedule,
+        request,
+        access,
+        egress,
+        result.journeys,
+        dependencies.now,
+        policy,
+        () => {
+          signal?.throwIfAborted();
+          if (performance.now() - insightStarted > DEPARTURE_INSIGHT_BUDGET_MS)
+            throw overBudget;
+        },
+      );
+    } catch (error) {
+      if (error !== overBudget) throw error;
+    }
+    metrics.insightMs = performance.now() - insightStarted;
+    return finish(insight ? { ...result, departureInsight: insight } : result);
   } finally {
     signal?.removeEventListener('abort', onAbort);
   }

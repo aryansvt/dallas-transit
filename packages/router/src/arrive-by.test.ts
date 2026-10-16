@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  BOARDING_MARGIN_SECONDS,
   buildSchedule,
   composeGeographicJourneys,
   validateGeographicRequest,
@@ -63,7 +64,7 @@ const summary = (result: GeographicCompositionResult) => {
   }));
 };
 
-// three direct A-D trips; with 300 s access and 120 s egress
+// three direct A-D trips; 300 s access, 120 s egress, 120 s boarding margin
 const directs = [
   trip('early', ['A', 'D'], [28800, 30000]),
   trip('mid', ['A', 'D'], [29400, 31200]),
@@ -74,17 +75,17 @@ describe('arrive-by geographic composition', () => {
   it('leaves as late as possible instead of arriving as early as possible', () => {
     const result = plan(directs, by(32400));
     expect(summary(result)).toEqual([
-      { leave: 29100, arrive: 31320, transfers: 0 },
+      { leave: 28980, arrive: 31320, transfers: 0 },
     ]);
     if (result.status !== 'ok') return;
     expect(result.journeys[0]).toMatchObject({
-      durationSeconds: 2220,
+      durationSeconds: 2340,
       legs: [
         {
           kind: 'walk',
           phase: 'access',
-          departureTime: 29100,
-          arrivalTime: 29400,
+          departureTime: 28980,
+          arrivalTime: 29280,
         },
         { kind: 'transit', tripId: 'mid', departureTime: 29400 },
         {
@@ -97,17 +98,27 @@ describe('arrive-by geographic composition', () => {
     });
   });
 
+  it('reaches the first stop the boarding margin before the vehicle leaves', () => {
+    const result = plan(directs, by(32400));
+    if (result.status !== 'ok') throw new Error(result.reason);
+    const [walk, ride] = result.journeys[0]!.legs;
+    expect(ride!.departureTime - walk!.arrivalTime).toBe(
+      BOARDING_MARGIN_SECONDS,
+    );
+    expect(BOARDING_MARGIN_SECONDS).toBe(120);
+  });
+
   it('moves the deadline earlier by the arrival buffer', () => {
-    expect(summary(plan(directs, by(31700)))[0]!.leave).toBe(29100);
+    expect(summary(plan(directs, by(31700)))[0]!.leave).toBe(28980);
     expect(
       summary(plan(directs, by(31700, { arrivalBufferSeconds: 480 })))[0]!
         .leave,
-    ).toBe(28500);
+    ).toBe(28380);
   });
 
   it('counts arriving exactly at the deadline as on time', () => {
-    expect(summary(plan(directs, by(31320)))[0]!.leave).toBe(29100);
-    expect(summary(plan(directs, by(31319)))[0]!.leave).toBe(28500);
+    expect(summary(plan(directs, by(31320)))[0]!.leave).toBe(28980);
+    expect(summary(plan(directs, by(31319)))[0]!.leave).toBe(28380);
   });
 
   it('rounds the leave time down and compares fractional walks exactly', () => {
@@ -122,11 +133,11 @@ describe('arrive-by geographic composition', () => {
         ),
       )[0];
     expect(fractional(31321)).toEqual({
-      leave: 29099,
+      leave: 28979,
       arrive: 31320.5,
       transfers: 0,
     });
-    expect(fractional(31320)!.leave).toBe(28499);
+    expect(fractional(31320)!.leave).toBe(28379);
   });
 
   it('returns no journey without scanning when nothing meets the deadline', () => {
@@ -146,14 +157,14 @@ describe('arrive-by geographic composition', () => {
     ];
     const result = plan(trips, by(31300));
     expect(summary(result)).toEqual([
-      { leave: 29700, arrive: 31220, transfers: 1 },
-      { leave: 28500, arrive: 31120, transfers: 0 },
+      { leave: 29580, arrive: 31220, transfers: 1 },
+      { leave: 28380, arrive: 31120, transfers: 0 },
     ]);
     expect(result).toMatchObject({ windowDepartures: 2 });
     // a one-departure budget keeps only the latest
     const budget = plan(trips, by(31300), { maxWindowDepartures: 1 });
     expect(summary(budget)).toEqual([
-      { leave: 29700, arrive: 31220, transfers: 1 },
+      { leave: 29580, arrive: 31220, transfers: 1 },
     ]);
     expect(budget).toMatchObject({ windowDepartures: 1 });
   });
@@ -161,7 +172,7 @@ describe('arrive-by geographic composition', () => {
   it('uses 24:00+ service on the same service date', () => {
     expect(
       summary(plan([trip('night', ['A', 'D'], [86400, 87900])], by(88200))),
-    ).toEqual([{ leave: 86100, arrive: 88020, transfers: 0 }]);
+    ).toEqual([{ leave: 85980, arrive: 88020, transfers: 0 }]);
   });
 
   it('never reaches into the previous service day', () => {
@@ -169,13 +180,13 @@ describe('arrive-by geographic composition', () => {
     expect(plan(directs, by(300, { arrivalBufferSeconds: 600 }))).toMatchObject(
       { status: 'no-journey', windowDepartures: 0 },
     );
-    // leaving 100 s before 00:00 to catch a 00:03:20 departure is excluded
+    // leaving 20 s before 00:00 to catch a 00:06:40 departure is excluded
     const trips = [
-      trip('too-early', ['A', 'D'], [200, 300]),
-      trip('ok', ['A', 'D'], [400, 500]),
+      trip('too-early', ['A', 'D'], [400, 450]),
+      trip('ok', ['A', 'D'], [500, 600]),
     ];
     expect(summary(plan(trips, by(1000)))).toEqual([
-      { leave: 100, arrive: 620, transfers: 0 },
+      { leave: 80, arrive: 720, transfers: 0 },
     ]);
     expect(plan([trips[0]!], by(1000))).toMatchObject({ status: 'no-journey' });
   });
@@ -183,7 +194,7 @@ describe('arrive-by geographic composition', () => {
   it('finds the latest departure however early it arrives, so a later deadline never loses it', () => {
     // a service gap: the only trip arrives 4 h before the later deadline
     const trips = [trip('only', ['A', 'D'], [29700, 35000])];
-    const expected = [{ leave: 29400, arrive: 35120, transfers: 0 }];
+    const expected = [{ leave: 29280, arrive: 35120, transfers: 0 }];
     expect(summary(plan(trips, by(36720)))).toEqual(expected);
     expect(summary(plan(trips, by(50000)))).toEqual(expected);
   });
@@ -196,13 +207,13 @@ describe('arrive-by geographic composition', () => {
       trip('connection', ['B', 'D'], [30400, 31100]),
     ];
     expect(summary(plan(trips, by(31300)))).toEqual([
-      { leave: 29700, arrive: 31220, transfers: 1 },
+      { leave: 29580, arrive: 31220, transfers: 1 },
     ]);
     expect(
       summary(plan(trips, by(31300), { arriveByWindowSeconds: 7200 })),
     ).toEqual([
-      { leave: 29700, arrive: 31220, transfers: 1 },
-      { leave: 24700, arrive: 26120, transfers: 0 },
+      { leave: 29580, arrive: 31220, transfers: 1 },
+      { leave: 24580, arrive: 26120, transfers: 0 },
     ]);
   });
 
@@ -222,7 +233,7 @@ describe('arrive-by geographic composition', () => {
           [candidate('D', 120, 'egress'), candidate('A', 60, 'egress')],
         ),
       ),
-    ).toEqual([{ leave: 29700, arrive: 30720, transfers: 0 }]);
+    ).toEqual([{ leave: 29580, arrive: 30720, transfers: 0 }]);
   });
 
   it('rejects mixed or incomplete time modes', () => {

@@ -18,6 +18,7 @@ import {
 import { loadRoutingSchedule } from '../workers/transit-ingest/dist/routing-schedule.js';
 import { postgisCandidateSource } from '../workers/transit-ingest/dist/nearby-stops.js';
 import {
+  BOARDING_MARGIN_SECONDS,
   buildSchedule,
   route,
   composeGeographicJourneys,
@@ -260,7 +261,8 @@ try {
       }
     }
     // arrive-by 15 min after the depart-at arrival (ADR 0006); the latest
-    // leave must be exact: depart-at from it is on time, one second later is not
+    // leave must be exact: leaving the boarding margin later is on time, one
+    // second after that is not
     const syntheticWalks = {
       id: 'synthetic-performance-only',
       async route(r) {
@@ -288,6 +290,30 @@ try {
         Math.ceil(Math.min(...departAt.journeys.map((j) => j.arrivalTime))) +
         900,
     };
+    // same six-and-six candidates the all-success synthetic provider selects
+    const walk = (phase) => (s) => ({
+      publicationId: s.publicationId,
+      stopId: s.stopId,
+      coordinate: s.coordinate,
+      walk: {
+        origin: phase === 'access' ? request.origin : s.coordinate,
+        destination: phase === 'access' ? s.coordinate : request.destination,
+        durationSeconds: 300,
+        distanceMeters: 400,
+      },
+    });
+    const earliestArrival = (candidates, departureTime) => {
+      const r = composeGeographicJourneys(
+        schedule,
+        { ...request, departureTime },
+        candidates.access.slice(0, 6).map(walk('access')),
+        candidates.egress.slice(0, 6).map(walk('egress')),
+        API_POLICY,
+      );
+      return r.status === 'ok'
+        ? Math.min(...r.journeys.map((j) => j.arrivalTime))
+        : Infinity;
+    };
     for (let sample = 0; sample < 3; sample++) {
       const result = await planGeographicJourney(
         schedule,
@@ -303,33 +329,12 @@ try {
       assert(
         result.journeys.every((j) => j.arrivalTime <= arriveBy.arrivalTime),
       );
-      // same six-and-six candidates the all-success synthetic provider selects
-      const walk = (phase) => (s) => ({
-        publicationId: s.publicationId,
-        stopId: s.stopId,
-        coordinate: s.coordinate,
-        walk: {
-          origin: phase === 'access' ? request.origin : s.coordinate,
-          destination: phase === 'access' ? s.coordinate : request.destination,
-          durationSeconds: 300,
-          distanceMeters: 400,
-        },
-      });
-      const earliestArrival = (departureTime) => {
-        const r = composeGeographicJourneys(
-          schedule,
-          { ...request, departureTime },
-          result.candidates.access.slice(0, 6).map(walk('access')),
-          result.candidates.egress.slice(0, 6).map(walk('egress')),
-          API_POLICY,
-        );
-        return r.status === 'ok'
-          ? Math.min(...r.journeys.map((j) => j.arrivalTime))
-          : Infinity;
-      };
       const leave = result.journeys[0].requestedDepartureTime;
-      assert(earliestArrival(leave) <= arriveBy.arrivalTime);
-      assert(earliestArrival(leave + 1) > arriveBy.arrivalTime);
+      const last = leave + BOARDING_MARGIN_SECONDS;
+      assert(earliestArrival(result.candidates, last) <= arriveBy.arrivalTime);
+      assert(
+        earliestArrival(result.candidates, last + 1) > arriveBy.arrivalTime,
+      );
       console.log(
         'PERFORMANCE ONLY: arrive-by, synthetic walking',
         JSON.stringify({
@@ -338,6 +343,39 @@ try {
           leave,
           compositionMs: result.metrics.compositionMs,
           windowDepartures: result.metrics.windowDepartures,
+        }),
+      );
+    }
+    // departure-time insight (ADR 0007): leaving at the hint plus the margin
+    // really arrives as early as the hint promises
+    for (const departureTime of [28800, 29220, 40200, 57900]) {
+      const result = await planGeographicJourney(
+        schedule,
+        { ...request, departureTime },
+        {
+          candidates: postgisCandidateSource(db, 'dart'),
+          walkingProvider: syntheticWalks,
+          now: 0,
+        },
+        API_POLICY,
+      );
+      assert.equal(result.status, 'ok');
+      const hint = result.departureInsight;
+      if (hint)
+        assert(
+          earliestArrival(
+            result.candidates,
+            hint.departureTime + BOARDING_MARGIN_SECONDS,
+          ) <=
+            result.journeys[0].arrivalTime + hint.arrivalChangeSeconds,
+        );
+      console.log(
+        'PERFORMANCE ONLY: departure insight, synthetic walking',
+        JSON.stringify({
+          departureTime,
+          hint,
+          compositionMs: result.metrics.compositionMs,
+          insightMs: result.metrics.insightMs,
         }),
       );
     }

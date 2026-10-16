@@ -5,6 +5,7 @@ import { buildApp } from './app.js';
 import { apiFixture } from './fixture.js';
 import { readServerConfig } from './config.js';
 import { ApiError } from './errors.js';
+import { serviceAnchor } from '@dallas-transit/realtime';
 
 const apps: ReturnType<typeof buildApp>[] = [];
 function setup(offset = 0, provider = true, timeout = 15000) {
@@ -251,14 +252,14 @@ describe('V1 journey contract', () => {
     // the transfer leaves at the same time but costs a transfer
     expect(body.journeys).toHaveLength(1);
     expect(body.journeys[0]).toMatchObject({
-      requestedDepartureTime: 28869,
+      requestedDepartureTime: 28749,
       arrivalTime: 30640.5,
       transferCount: 0,
     });
     expect(body.journeys[0].legs[0]).toMatchObject({
       phase: 'access',
-      departureTime: 28869,
-      arrivalTime: 28899.25,
+      departureTime: 28749,
+      arrivalTime: 28779.25,
     });
     expect(body.liveJourneyIds).toHaveLength(1);
     // one minute early rules out the direct ride arriving at 30640.5
@@ -283,6 +284,47 @@ describe('V1 journey contract', () => {
       reason: 'transit-unreachable',
     });
   });
+  it('adds a departure-time hint beside depart-at journeys', async () => {
+    // service-day seconds come from the injected clock in America/Chicago
+    const day = serviceAnchor('2026-09-18', 'America/Chicago');
+    const send = (payload: object, now: number) => {
+      const f = apiFixture();
+      const app = buildApp(
+        {},
+        {
+          config: readServerConfig({}),
+          repository: f.repository,
+          walkingProvider: f.provider,
+          now: () => day + now,
+        },
+      );
+      apps.push(app);
+      return app
+        .inject({
+          method: 'POST',
+          url: '/v1/journeys',
+          payload: { ...f.request, ...payload },
+        })
+        .then((r) => r.json());
+    };
+    // waiting at A until 28900: leaving at 28749 makes the same rides
+    const body = await send({ departureTime: 28000 }, 0);
+    expect(body.journeys[0]).toMatchObject({ arrivalTime: 30040.5 });
+    expect(body.departureInsight).toEqual({
+      kind: 'no-rush',
+      departureTime: 28749,
+      arrivalChangeSeconds: 0,
+    });
+    // planned normally, just without a hint
+    for (const quiet of [
+      await send({ departureTime: 28000 }, 28750),
+      await send({ departureTime: 28000, earliestDepartureTime: 28750 }, 0),
+      await send({ departureTime: undefined, arrivalTime: 30700 }, 0),
+    ]) {
+      expect(quiet.status).toBe('ok');
+      expect(quiet).not.toHaveProperty('departureInsight');
+    }
+  });
   it('keeps the depart-at response free of arrive-by fields', async () => {
     const body = (await setup().send()).json();
     expect(body.requestedDepartureTime).toBe(28800);
@@ -300,6 +342,10 @@ describe('V1 journey contract', () => {
     { departureTime: undefined, arrivalTime: '08:00:00' },
     { departureTime: undefined, arrivalTime: -1 },
     { departureTime: undefined, arrivalTime: 2147483648 },
+    { departureTime: undefined, arrivalTime: 30700, earliestDepartureTime: 0 },
+    { earliestDepartureTime: 1.5 },
+    { earliestDepartureTime: -1 },
+    { earliestDepartureTime: '08:00:00' },
   ])('rejects ambiguous or invalid time modes: %j', async (change) => {
     const f = setup();
     const load = vi.spyOn(f.repository, 'publication');

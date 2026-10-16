@@ -26,6 +26,10 @@ export const DEFAULT_GEOGRAPHIC_POLICY: GeographicPolicy = Object.freeze({
   maxWindowDepartures: 4,
 });
 
+/** Arrive-by leave times reach the first stop this long before the vehicle
+ * departs, so a slightly early bus or a slow walk is not a missed ride. */
+export const BOARDING_MARGIN_SECONDS = 120;
+
 export function validateCoordinate(
   value: unknown,
 ): asserts value is Coordinate {
@@ -98,12 +102,15 @@ export function validateGeographicRequest(request: GeographicRequest): void {
   if (isArriveBy(request)) {
     if (loose.departureTime !== undefined)
       throw new Error('Use departureTime or arrivalTime, not both');
+    if (loose.earliestDepartureTime !== undefined)
+      throw new Error('earliestDepartureTime needs departureTime');
     integer(request.arrivalTime, 'arrivalTime');
     integer(request.arrivalBufferSeconds ?? 0, 'arrivalBufferSeconds', 86400);
   } else {
     if (loose.arrivalBufferSeconds !== undefined)
       throw new Error('arrivalBufferSeconds needs arrivalTime');
     integer(request.departureTime, 'departureTime');
+    integer(request.earliestDepartureTime ?? 0, 'earliestDepartureTime');
   }
   // A service-facing budget in addition to the core's independently overridable limit.
   integer(request.maxTransfers ?? DEFAULT_MAX_TRANSFERS, 'maxTransfers', 8);

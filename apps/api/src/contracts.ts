@@ -24,15 +24,20 @@ export const journeyRequestSchema = {
       destination: coordinateSchema,
       serviceDate: { type: 'string', minLength: 10, maxLength: 10 },
       departureTime: integer,
+      earliestDepartureTime: integer,
       arrivalTime: integer,
       arrivalBufferMinutes: { ...integer, maximum: MAX_ARRIVAL_BUFFER_MINUTES },
       maxTransfers: { ...integer, maximum: MAX_TRANSFERS },
     },
     ['origin', 'destination', 'serviceDate'],
   ),
-  // exactly one time mode; a buffer only means something when arriving by
+  // exactly one time mode; a buffer only means something when arriving by,
+  // an earliest leave only when departing at
   oneOf: [{ required: ['departureTime'] }, { required: ['arrivalTime'] }],
-  dependencies: { arrivalBufferMinutes: ['arrivalTime'] },
+  dependencies: {
+    arrivalBufferMinutes: ['arrivalTime'],
+    earliestDepartureTime: ['departureTime'],
+  },
 };
 export function journeyRequest(value: unknown): GeographicRequest {
   try {
@@ -209,6 +214,11 @@ export const journeyResponseSchema = {
           maxItems: 3,
           items: { type: 'string', format: 'uuid' },
         },
+        departureInsight: object({
+          kind: { enum: ['leave-earlier', 'no-rush'] },
+          departureTime: number,
+          arrivalChangeSeconds: number,
+        }),
       },
       [
         ...Object.keys(context),
