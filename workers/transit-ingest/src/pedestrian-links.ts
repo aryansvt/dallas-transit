@@ -56,20 +56,27 @@ export async function publishPedestrianEvidence(
         evidence.retainUntil,
       ],
     );
-    for (const link of evidence.links)
-      await db.query(
-        `INSERT INTO static_gtfs.pedestrian_links
-      (feed_id,link_id,from_stop_id,to_stop_id,duration_seconds,distance_meters,provenance) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-        [
-          evidence.publicationId,
-          link.id,
-          link.fromStopId,
-          link.toStopId,
-          link.durationSeconds,
-          link.pedestrian!.distanceMeters,
-          link.pedestrian!.provenance,
-        ],
-      );
+    // one statement; the 100000-link cap bounds the payload to about 20 MB
+    await db.query(
+      `INSERT INTO static_gtfs.pedestrian_links
+      (feed_id,link_id,from_stop_id,to_stop_id,duration_seconds,distance_meters,provenance)
+      SELECT $1, id, from_stop_id, to_stop_id, duration_seconds, distance_meters, provenance
+      FROM jsonb_to_recordset($2::jsonb) AS x(id text, from_stop_id text, to_stop_id text,
+        duration_seconds integer, distance_meters double precision, provenance text)`,
+      [
+        evidence.publicationId,
+        JSON.stringify(
+          evidence.links.map((link) => ({
+            id: link.id,
+            from_stop_id: link.fromStopId,
+            to_stop_id: link.toStopId,
+            duration_seconds: link.durationSeconds,
+            distance_meters: link.pedestrian!.distanceMeters,
+            provenance: link.pedestrian!.provenance,
+          })),
+        ),
+      ],
+    );
   });
 }
 

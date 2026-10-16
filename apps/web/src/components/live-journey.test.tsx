@@ -377,6 +377,31 @@ it('shows disruption warnings and preserves current directions after replan fail
   await click('Replan from this stop');
   expect(replan).toHaveBeenCalledTimes(1);
 });
+it('lets a rider confirm a stop right after location fails, since no request was sent', async () => {
+  vi.spyOn(navigator, 'geolocation', 'get').mockReturnValue({
+    getCurrentPosition: (_ok: unknown, fail: () => void) => fail(),
+  } as unknown as Geolocation);
+  const replan = vi.fn(async () => ({
+    status: 'cooldown' as const,
+    retryAfterSeconds: 30,
+  }));
+  await render({ ...previewClient, live: async () => state(), replan });
+  await click('Use my current location');
+  expect(replan).not.toHaveBeenCalled();
+  expect(container.textContent).toContain('Confirm a stop instead');
+  const select = container.querySelector('select')!;
+  await act(async () => {
+    select.value = select.options[1]!.value;
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await click('Replan from this stop');
+  expect(replan).toHaveBeenCalledTimes(1);
+  expect(container.textContent).toContain('Try again in 30 seconds');
+  // the server's retry window replaces the client's one-minute guess
+  await tick(31000);
+  await click('Replan from this stop');
+  expect(replan).toHaveBeenCalledTimes(2);
+});
 it('rejects equivalent routes without oscillating or silently replacing the selected journey', async () => {
   const onReplace = vi.fn();
   await render(

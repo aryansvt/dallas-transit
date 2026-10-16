@@ -160,7 +160,6 @@ export function LiveJourneyPanel({
     setBusy(true);
     setAlternative(null);
     setMessage('');
-    cooldown.current = Date.now() + 60000;
     try {
       const input =
         location === 'stop'
@@ -204,11 +203,14 @@ export function LiveJourneyPanel({
               }),
             };
       abort.signal.throwIfAborted();
+      // only a request that reaches the server starts the cooldown
+      cooldown.current = Date.now() + 60000;
       const result = await client.replan(id, input, abort.signal);
       abort.signal.throwIfAborted();
-      if (result.status === 'cooldown')
+      if (result.status === 'cooldown') {
+        cooldown.current = Date.now() + result.retryAfterSeconds * 1000;
         setMessage(`Try again in ${result.retryAfterSeconds} seconds.`);
-      else if (result.result.status === 'no-journey')
+      } else if (result.result.status === 'no-journey')
         setMessage(
           'No new route was found. Your original directions remain available.',
         );

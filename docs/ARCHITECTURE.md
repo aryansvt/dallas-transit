@@ -49,7 +49,6 @@ apps/
   api/                  Fastify API
 
 packages/
-  domain/               Transit-domain types and invariants
   gtfs/                 GTFS parsing/normalization
   router/               RAPTOR-style routing engine
   realtime/             Realtime domain mapping
@@ -64,6 +63,12 @@ infra/
 docs/
   adr/                  Architecture Decision Records
 ```
+
+Transit-domain types live with the package that owns them: GTFS records in
+`packages/gtfs`, the routing schedule and journeys in `packages/router`, realtime
+state in `packages/realtime`, and wire contracts in `packages/shared`. The empty
+`packages/domain` placeholder was removed. Add a separate domain package only when
+types genuinely need to be shared across those boundaries.
 
 ## Frontend
 

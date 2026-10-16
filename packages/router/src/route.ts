@@ -141,21 +141,26 @@ export function routeToStops(
   if (!destinations.size || origin === undefined) return results;
   let previous = new Map<number, Label[]>([[origin, [initial]]]);
   const best = new Map<number, Label[]>();
+  // hot path: plain loop, no per-call array allocation
   const bounded = (
     time: number,
     boardings: number,
     walking: number,
     risk: number,
-  ) =>
-    [...destinations.values()].every((labels) =>
-      labels.some(
-        (d) =>
-          d.time < time &&
-          d.boardings <= boardings &&
-          d.walking <= walking &&
-          d.risk <= risk,
-      ),
-    );
+  ) => {
+    for (const labels of destinations.values())
+      if (
+        !labels.some(
+          (d) =>
+            d.time < time &&
+            d.boardings <= boardings &&
+            d.walking <= walking &&
+            d.risk <= risk,
+        )
+      )
+        return false;
+    return true;
+  };
   function insert(
     frontier: Label[],
     label: Label,
@@ -163,15 +168,14 @@ export function routeToStops(
   ): boolean {
     const comparable = (a: Label) =>
       !compareState || a.linkState === label.linkState;
-    const equal = frontier.filter((a) => comparable(a) && equivalent(a, label));
-    if (equal.some((a) => a.identity === label.identity) || equal.length >= 3)
-      return false;
-    if (
-      frontier.some(
-        (a) => comparable(a) && dominates(a, label) && !equivalent(a, label),
-      )
-    )
-      return false;
+    // one pass: reject a repeated signature, a fourth equal state, or a dominator
+    let equal = 0;
+    for (const a of frontier) {
+      if (!comparable(a)) continue;
+      if (equivalent(a, label)) {
+        if (a.identity === label.identity || ++equal >= 3) return false;
+      } else if (dominates(a, label)) return false;
+    }
     for (let i = frontier.length - 1; i >= 0; i--)
       if (
         comparable(frontier[i]!) &&

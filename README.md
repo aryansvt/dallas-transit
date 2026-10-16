@@ -207,7 +207,6 @@ Stop local containers with `pnpm infra:down`; the database volume is preserved.
 ```text
 apps/web/                 Responsive planner, journey timeline and MapLibre boundary
 apps/api/                 Fastify journey/metadata API and service lifecycle
-packages/domain/          Future portable transit types/invariants
 packages/gtfs/            Streaming static GTFS parsing and normalization
 packages/router/          Independent schedule-based routing and reconstruction
 packages/realtime/        Experimental realtime mapping (DART live access disabled)

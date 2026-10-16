@@ -8,6 +8,18 @@ import { Icon } from './icon';
 import { useLiveJourney } from './live-journey';
 import { liveClient, type TransitClient } from '../lib/api';
 
+type MapRuntime = typeof import('../lib/map-runtime');
+// marker centers stay clear of the button row and zoom control (top) and the
+// caption (bottom), which a flat 72px padding did not
+const FIT_PADDING = { top: 88, right: 72, bottom: 104, left: 72 };
+function fitPoints(map: LibreMap, runtime: MapRuntime, points: MapPoint[]) {
+  const bounds = new runtime.LngLatBounds();
+  points.forEach((p) =>
+    bounds.extend([p.coordinate.longitude, p.coordinate.latitude]),
+  );
+  map.fitBounds(bounds, { padding: FIT_PADDING, maxZoom: 15, duration: 0 });
+}
+
 function VehicleMarkers({
   id,
   client,
@@ -15,7 +27,7 @@ function VehicleMarkers({
 }: {
   id: string;
   client: TransitClient;
-  ready: { map: LibreMap; runtime: typeof import('../lib/map-runtime') };
+  ready: { map: LibreMap; runtime: MapRuntime };
 }) {
   const { data } = useLiveJourney(id, client);
   const markers = useRef(new Map<number, import('maplibre-gl').Marker>());
@@ -88,7 +100,7 @@ function MapCanvas({
   const instance = useRef<LibreMap | null>(null);
   const [ready, setReady] = useState<{
     map: LibreMap;
-    runtime: typeof import('../lib/map-runtime');
+    runtime: MapRuntime;
   } | null>(null);
   const [failed, setFailed] = useState(false);
   const [visible, setVisible] = useState(false);
@@ -179,7 +191,7 @@ function MapCanvas({
     if (!ready || ready.map !== instance.current) return;
     const {
       map,
-      runtime: { Marker, Popup, LngLatBounds },
+      runtime: { Marker, Popup },
     } = ready;
     const markers = points.map((p) => {
       const element = document.createElement('button');
@@ -192,13 +204,8 @@ function MapCanvas({
         .setPopup(new Popup({ offset: 22 }).setText(p.label))
         .addTo(map);
     });
-    if (points.length > 1) {
-      const bounds = new LngLatBounds();
-      points.forEach((p) =>
-        bounds.extend([p.coordinate.longitude, p.coordinate.latitude]),
-      );
-      map.fitBounds(bounds, { padding: 72, maxZoom: 15, duration: 0 });
-    } else if (points[0])
+    if (points.length > 1) fitPoints(map, ready.runtime, points);
+    else if (points[0])
       map.jumpTo({
         center: [points[0].coordinate.longitude, points[0].coordinate.latitude],
         zoom: 13,
@@ -207,11 +214,7 @@ function MapCanvas({
   }, [points, ready]);
   const fit = () => {
     if (!ready || ready.map !== instance.current || !points.length) return;
-    const bounds = new ready.runtime.LngLatBounds();
-    points.forEach((p) =>
-      bounds.extend([p.coordinate.longitude, p.coordinate.latitude]),
-    );
-    ready.map.fitBounds(bounds, { padding: 72, maxZoom: 15, duration: 0 });
+    fitPoints(ready.map, ready.runtime, points);
   };
   return (
     <div className={`map-canvas-wrap${expanded ? ' expanded' : ''}`}>
@@ -273,7 +276,7 @@ function MapCanvas({
         {!expanded && (
           <button data-expand-map className="map-button" onClick={onExpand}>
             <Icon name="expand" />
-            <span>Expand map</span>
+            <span className="expand-label">Expand map</span>
           </button>
         )}
       </div>

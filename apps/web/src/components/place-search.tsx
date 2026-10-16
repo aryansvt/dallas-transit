@@ -191,7 +191,7 @@ export function PlaceSearch({
             ? failureText
             : places.length === 0
               ? 'No places found. Try a fuller name or street address.'
-              : `${places.length} places found.`);
+              : `${places.length} place${places.length === 1 ? '' : 's'} found.`);
   return (
     <Dialog
       title={target === 'origin' ? 'Your starting point' : 'Your destination'}

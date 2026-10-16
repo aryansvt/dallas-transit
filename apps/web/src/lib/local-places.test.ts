@@ -2,7 +2,11 @@ import { expect, it } from 'vitest';
 import {
   addRecent,
   emptyPlaces,
+  isSaved,
+  MAX_RECENT,
+  MAX_SAVED,
   readPlaces,
+  savedFull,
   toggleSaved,
   writePlaces,
 } from './local-places';
@@ -50,16 +54,34 @@ it('validates storage version, structure, lengths and coordinates', () => {
 });
 it('bounds and deduplicates recents and saved places', () => {
   let data = emptyPlaces();
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < 20; i++) {
     data = addRecent(data, { ...place, name: String(i) });
     data = toggleSaved(data, { ...place, name: String(i) });
   }
-  expect(data.recent).toHaveLength(5);
-  expect(data.saved).toHaveLength(5);
+  expect(data.recent).toHaveLength(MAX_RECENT);
+  expect(data.saved).toHaveLength(MAX_SAVED);
   data = addRecent(data, data.recent[0]!);
-  expect(data.recent).toHaveLength(5);
+  expect(data.recent).toHaveLength(MAX_RECENT);
   data = toggleSaved(data, data.saved[0]!);
-  expect(data.saved).toHaveLength(4);
+  expect(data.saved).toHaveLength(MAX_SAVED - 1);
+});
+it('never silently drops a saved place when the list is full', () => {
+  let data = emptyPlaces();
+  for (let i = 0; i < MAX_SAVED; i++)
+    data = toggleSaved(data, { ...place, name: String(i) });
+  expect(savedFull(data)).toBe(true);
+  const extra = { ...place, name: 'One too many' };
+  expect(toggleSaved(data, extra)).toBe(data);
+  expect(data.saved.map((p) => p.name)).toContain('0');
+  // unsaving still works when full
+  expect(isSaved(toggleSaved(data, data.saved[0]!), data.saved[0]!)).toBe(
+    false,
+  );
+  // a full list survives a storage round trip
+  let raw = '';
+  writePlaces({ setItem: (_key, value) => (raw = value) }, data);
+  expect(raw.length).toBeLessThan(24000);
+  expect(readPlaces({ getItem: () => raw }).saved).toHaveLength(MAX_SAVED);
 });
 it('handles denied reads and writes without breaking planning', () => {
   expect(
