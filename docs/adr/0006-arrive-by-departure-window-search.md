@@ -3,7 +3,10 @@
 ## Status
 
 Accepted. Extends ADRs 0002 and 0005 without changing them. Depart-at planning,
-ranking and every M9C limit are unchanged.
+ranking and every M9C limit are unchanged. Amended 2026-10-16 with a boarding
+margin (see Request semantics).
+
+ADR 0007 builds departure-time insight on this search.
 
 ## Context
 
@@ -100,8 +103,17 @@ provider calls, 36 pair searches, three results) apply unchanged.
 - The effective deadline is `arrivalTime - arrivalBufferSeconds`. Arriving exactly
   at the deadline counts as on time.
 - Each arrive-by journey's `requestedDepartureTime` is that journey's own latest
-  leave time: first boarding minus access walk, rounded down to a whole second.
-  Its duration therefore has no initial wait.
+  leave time: first boarding minus access walk minus `BOARDING_MARGIN_SECONDS`
+  (120 s), rounded down to a whole second. The rider reaches the first stop two
+  minutes before the vehicle leaves, so a slightly early bus or a slow walk does
+  not cost the ride. Its duration includes that wait and no other initial wait.
+- The margin is the same for every mode. A stricter bus margin needs GTFS
+  `route_type` in the routing schedule, which it does not carry today. A uniform
+  margin also keeps the leave-time order identical to the boarding order, so the
+  latest leave is still exact. Depart-at journeys get no margin: they leave at
+  the requested time and may board with no slack, exactly as before.
+- The 00:00 floor and the one-hour alternative window are measured on leave
+  times, margin included.
 - One service date is searched, as in depart-at. Deadlines past midnight use the
   same date's 24:00+ service. No leave time is earlier than 00:00. An effective
   deadline before 00:00 returns no journey instead of reaching into the previous
@@ -132,8 +144,9 @@ because every forward run starts at a departure known to make it and stops at th
 deadline, while depart-at must explore until a destination bounds the search.
 
 For every row the first journey's leave time was checked against depart-at
-planning with the same candidates: leaving at that time arrives in time, and
-leaving one second later does not. Depart-at output hashes are unchanged
+planning with the same candidates: leaving the boarding margin after it arrives
+in time, and leaving one second later than that does not. (Before the margin,
+the check was on the leave time itself.) Depart-at output hashes are unchanged
 (`a03748dc...385035`). An alternating old-versus-new depart-at A/B showed median
 differences between -24 and +41 ms on roughly 940 ms, which is within run-to-run
 noise.

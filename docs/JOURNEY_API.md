@@ -21,8 +21,10 @@ time, or a buffer with `departureTime` returns `400 INVALID_REQUEST`.
 Arrive-by responses replace `requestedDepartureTime` in the top-level context with
 `requestedArrivalTime` and `arrivalBufferMinutes`. Depart-at responses are
 unchanged. Each arrive-by journey keeps every V1 journey field. Its
-`requestedDepartureTime` is that journey's own latest leave time (first boarding
-minus access walk, whole seconds), and its duration has no initial wait. Journeys
+`requestedDepartureTime` is that journey's own latest leave time: first boarding
+minus access walk minus a two-minute boarding margin, in whole seconds. The rider
+reaches the first stop two minutes before the vehicle leaves. Its duration
+includes that wait and no other initial wait. Depart-at journeys have no margin. Journeys
 arrive by `arrivalTime - buffer`, and arriving exactly then counts. They are
 ordered by latest leave time, then fewer transfers, less walking and lower
 scheduled risk, with up to three results as in M9C. No-journey reasons are

@@ -251,14 +251,14 @@ describe('V1 journey contract', () => {
     // the transfer leaves at the same time but costs a transfer
     expect(body.journeys).toHaveLength(1);
     expect(body.journeys[0]).toMatchObject({
-      requestedDepartureTime: 28869,
+      requestedDepartureTime: 28749,
       arrivalTime: 30640.5,
       transferCount: 0,
     });
     expect(body.journeys[0].legs[0]).toMatchObject({
       phase: 'access',
-      departureTime: 28869,
-      arrivalTime: 28899.25,
+      departureTime: 28749,
+      arrivalTime: 28779.25,
     });
     expect(body.liveJourneyIds).toHaveLength(1);
     // one minute early rules out the direct ride arriving at 30640.5

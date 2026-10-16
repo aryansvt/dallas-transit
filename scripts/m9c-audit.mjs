@@ -18,6 +18,7 @@ import {
 import { loadRoutingSchedule } from '../workers/transit-ingest/dist/routing-schedule.js';
 import { postgisCandidateSource } from '../workers/transit-ingest/dist/nearby-stops.js';
 import {
+  BOARDING_MARGIN_SECONDS,
   buildSchedule,
   route,
   composeGeographicJourneys,
@@ -260,7 +261,8 @@ try {
       }
     }
     // arrive-by 15 min after the depart-at arrival (ADR 0006); the latest
-    // leave must be exact: depart-at from it is on time, one second later is not
+    // leave must be exact: leaving the boarding margin later is on time, one
+    // second after that is not
     const syntheticWalks = {
       id: 'synthetic-performance-only',
       async route(r) {
@@ -328,8 +330,9 @@ try {
           : Infinity;
       };
       const leave = result.journeys[0].requestedDepartureTime;
-      assert(earliestArrival(leave) <= arriveBy.arrivalTime);
-      assert(earliestArrival(leave + 1) > arriveBy.arrivalTime);
+      const last = leave + BOARDING_MARGIN_SECONDS;
+      assert(earliestArrival(last) <= arriveBy.arrivalTime);
+      assert(earliestArrival(last + 1) > arriveBy.arrivalTime);
       console.log(
         'PERFORMANCE ONLY: arrive-by, synthetic walking',
         JSON.stringify({

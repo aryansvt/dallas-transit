@@ -2,6 +2,7 @@ import { latestDepartures } from './latest-departures.js';
 import { routeToStops, routeWindow } from './route.js';
 import { compareIds, integer } from './validation.js';
 import {
+  BOARDING_MARGIN_SECONDS,
   departureWindow,
   geographicPolicy,
   isArriveBy,
@@ -117,6 +118,9 @@ export function composeGeographicJourneys(
       })),
       ...transfers,
     });
+  // arrive-by: leave so the rider waits the margin at the first stop
+  const leaveFor = (a: WalkingCandidate, boarding: number) =>
+    boarding - a.walk.durationSeconds - BOARDING_MARGIN_SECONDS;
   // per access: latest departure for each ride count, never before 00:00
   const latest = new Map<string, number[]>();
   // an effective deadline before 00:00 belongs to the previous service day
@@ -135,8 +139,7 @@ export function composeGeographicJourneys(
       latest.set(
         a.stopId,
         values.filter(
-          (t): t is number =>
-            t !== null && t - a.walk.durationSeconds >= earliest,
+          (t): t is number => t !== null && leaveFor(a, t) >= earliest,
         ),
       );
     }
@@ -145,7 +148,7 @@ export function composeGeographicJourneys(
   const cutoff =
     Math.max(
       ...access.flatMap((a) =>
-        (latest.get(a.stopId) ?? []).map((t) => t - a.walk.durationSeconds),
+        (latest.get(a.stopId) ?? []).map((t) => leaveFor(a, t)),
       ),
     ) - policy.arriveByWindowSeconds!;
   let transitSearches = 0;
@@ -170,9 +173,7 @@ export function composeGeographicJourneys(
     else if (latest.has(a.stopId)) {
       const departureTimes = [
         ...new Set(
-          latest
-            .get(a.stopId)!
-            .filter((t) => t - a.walk.durationSeconds >= cutoff),
+          latest.get(a.stopId)!.filter((t) => leaveFor(a, t) >= cutoff),
         ),
       ]
         .sort((x, y) => y - x)
@@ -200,9 +201,9 @@ export function composeGeographicJourneys(
       for (const transit of result.journeys) {
         if (arriveBy && transit.arrivalTime > egressDeadline.get(e.stopId)!)
           continue;
-        // arrive-by: be at the stop by the first boarding, whole seconds early
+        // arrive-by: round down so the margin is never short
         const leave = arriveBy
-          ? Math.floor(transit.requestedDepartureTime - a.walk.durationSeconds)
+          ? Math.floor(leaveFor(a, transit.requestedDepartureTime))
           : request.departureTime;
         const arrivalTime = transit.arrivalTime + e.walk.durationSeconds;
         if (!Number.isSafeInteger(Math.ceil(arrivalTime)))

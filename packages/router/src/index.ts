@@ -11,6 +11,7 @@ export type * from './types.js';
 export type * from './geographic-types.js';
 export { composeGeographicJourneys } from './geographic.js';
 export {
+  BOARDING_MARGIN_SECONDS,
   DEFAULT_GEOGRAPHIC_POLICY,
   geographicPolicy,
   validateCoordinate,

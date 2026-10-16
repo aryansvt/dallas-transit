@@ -26,6 +26,10 @@ export const DEFAULT_GEOGRAPHIC_POLICY: GeographicPolicy = Object.freeze({
   maxWindowDepartures: 4,
 });
 
+/** Arrive-by leave times reach the first stop this long before the vehicle
+ * departs, so a slightly early bus or a slow walk is not a missed ride. */
+export const BOARDING_MARGIN_SECONDS = 120;
+
 export function validateCoordinate(
   value: unknown,
 ): asserts value is Coordinate {
