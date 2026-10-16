@@ -15,6 +15,8 @@ const clock = new Intl.DateTimeFormat('en-US', {
   minute: '2-digit',
 });
 
+/** "9:50 AM" in Dallas time. */
+export const clockTime = (instant: Date) => clock.format(instant);
 export function dallasParts(instant: Date) {
   const p = Object.fromEntries(
     civil.formatToParts(instant).map((p) => [p.type, p.value]),
@@ -76,6 +78,17 @@ export function departureAt(
       'This early time needs the previous day’s overnight service. Select that option below.',
     );
   return { serviceDate, departureTime };
+}
+/** Arrive-by searches the arrival date's own service day. */
+export function arriveBy(date: string, time: string) {
+  const arrivalTime = Math.floor(
+    (civilInstant(date, time).getTime() - serviceAnchor(date)) / 1000,
+  );
+  if (arrivalTime < 0)
+    throw new Error(
+      'That arrival is too early in the day. Choose a later time.',
+    );
+  return { serviceDate: date, arrivalTime };
 }
 export function leaveNow(now = new Date()) {
   const serviceDate = dallasParts(now).date;

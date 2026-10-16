@@ -30,6 +30,14 @@ export default function PrivacyPage() {
             remove them in the app or clear this site’s browser data. Temporary
             Mapbox search results and GPS origins are not saved there.
           </p>
+          <p>
+            A class schedule you import is read in your browser. Its classes,
+            your Home and School places and your saved places stay in this
+            browser’s local storage; the calendar file itself is not kept or
+            uploaded. Planning a trip to a class sends only that trip’s
+            coordinates and times, like any other trip. Remove a schedule from
+            Your next class, or clear this site’s browser data.
+          </p>
         </section>
         <section aria-labelledby="providers-title">
           <h2 id="providers-title">Requests and providers</h2>

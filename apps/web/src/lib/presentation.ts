@@ -28,15 +28,27 @@ export function routeName(route: RouteDetails | undefined) {
 }
 export const stopName = (refs: References, id: string) =>
   refs.stops.find((s) => s.stopId === id)?.name ?? 'Transit stop';
+/** Arrive-by options leave at different times, so arriving first is not
+ * "fastest" there; leaving latest is what sets one apart. */
 export function distinction(
   journey: GeographicJourney,
   all: readonly GeographicJourney[],
+  arriveBy = false,
 ) {
   if (all.length < 2) return '';
   const uniqueMinimum = (
     key: 'arrivalTime' | 'transferCount' | 'walkingDurationSeconds',
   ) => all.every((j) => j === journey || journey[key] < j[key]);
-  if (uniqueMinimum('arrivalTime')) return 'Fastest';
+  if (arriveBy) {
+    if (
+      all.every(
+        (j) =>
+          j === journey ||
+          journey.requestedDepartureTime > j.requestedDepartureTime,
+      )
+    )
+      return 'Leaves latest';
+  } else if (uniqueMinimum('arrivalTime')) return 'Fastest';
   // Zero transfers is factual even when multiple direct services tie.
   if (uniqueMinimum('transferCount'))
     return journey.transferCount === 0 ? 'No transfers' : 'Fewest transfers';

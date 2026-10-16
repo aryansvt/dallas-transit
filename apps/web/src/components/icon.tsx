@@ -19,7 +19,11 @@ export function Icon({
     | 'linkedin'
     | 'email'
     | 'chevron'
-    | 'alert';
+    | 'alert'
+    | 'home'
+    | 'school'
+    | 'calendar'
+    | 'edit';
   className?: string;
 }) {
   const paths: Record<typeof name, React.ReactNode> = {
@@ -80,6 +84,25 @@ export function Icon({
         <path d="M12 10v4m0 3h.01" />
       </>
     ),
+    home: (
+      <>
+        <path d="M4 10.5 12 4l8 6.5" />
+        <path d="M6 9v11h12V9M10 20v-5h4v5" />
+      </>
+    ),
+    school: (
+      <>
+        <path d="m2.5 9 9.5-4.5L21.5 9 12 13.5Z" />
+        <path d="M6.5 11v4.5c1.5 1.6 3.3 2.4 5.5 2.4s4-.8 5.5-2.4V11M21.5 9v5" />
+      </>
+    ),
+    calendar: (
+      <>
+        <rect x="3.5" y="5" width="17" height="15" rx="2.5" />
+        <path d="M3.5 10h17M8 3v4m8-4v4M8 14h2m4 0h2m-8 3h2" />
+      </>
+    ),
+    edit: <path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16Zm9.5-13.5 4 4" />,
     github: (
       <>
         <path

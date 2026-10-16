@@ -1,6 +1,6 @@
 import type { Ref } from 'react';
 import type { JourneyResponse } from '@dallas-transit/shared';
-import { displayDate } from '../lib/time';
+import { displayDate, serviceTime } from '../lib/time';
 import { RouteCard } from './journey';
 import { Icon } from './icon';
 
@@ -14,6 +14,7 @@ export function RouteResults({
   onRetry,
   onChangeDeparture,
   onSelect,
+  onInsight,
 }: {
   ref: Ref<HTMLElement>;
   data: JourneyResponse | undefined;
@@ -24,8 +25,15 @@ export function RouteResults({
   onRetry(): void;
   onChangeDeparture(): void;
   onSelect(index: number): void;
+  /** Plan again from a suggested departure, in service-day seconds. */
+  onInsight(departureTime: number): void;
 }) {
   const result = data?.status === 'ok' ? data : undefined;
+  const at = (seconds: number) =>
+    result ? serviceTime(result.serviceDate, seconds).clock : '';
+  const arriveBy = result && 'requestedArrivalTime' in result ? result : null;
+  const departAt = result && 'requestedDepartureTime' in result ? result : null;
+  const hint = departAt?.departureInsight;
   return (
     <section
       ref={ref}
@@ -97,7 +105,48 @@ export function RouteResults({
             </span>
             <span className="sr-only"> · </span>
             <span>{displayDate(result.serviceDate)} · Dallas time</span>
+            {arriveBy && (
+              <span className="caption-deadline">
+                Arrive by{' '}
+                {at(
+                  arriveBy.requestedArrivalTime -
+                    arriveBy.arrivalBufferMinutes * 60,
+                )}
+              </span>
+            )}
           </p>
+          {hint && departAt && (
+            <div className="insight" role="note">
+              <span className="insight-icon" aria-hidden="true">
+                <Icon name="clock" />
+              </span>
+              <p>
+                {hint.kind === 'leave-earlier' ? (
+                  <>
+                    <strong>Worth leaving earlier:</strong> depart{' '}
+                    {at(hint.departureTime)} instead of{' '}
+                    {at(departAt.requestedDepartureTime)}, arrive{' '}
+                    {Math.round(-hint.arrivalChangeSeconds / 60)} min sooner
+                  </>
+                ) : (
+                  <>
+                    <strong>No need to rush:</strong> leaving{' '}
+                    {Math.round(
+                      (hint.departureTime - departAt.requestedDepartureTime) /
+                        60,
+                    )}{' '}
+                    min later arrives at nearly the same time
+                  </>
+                )}
+              </p>
+              <button
+                className="secondary-button"
+                onClick={() => onInsight(hint.departureTime)}
+              >
+                Plan for {at(hint.departureTime)}
+              </button>
+            </div>
+          )}
           {result.incomplete && (
             <p className="notice" role="status">
               Some route options may be unavailable.
@@ -112,6 +161,7 @@ export function RouteResults({
                 references={result.references}
                 selected={selected === i}
                 onSelect={() => onSelect(i)}
+                arriveBy={Boolean(arriveBy)}
               />
             ))}
           </div>

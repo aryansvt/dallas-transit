@@ -80,16 +80,19 @@ export function RouteCard({
   references,
   selected,
   onSelect,
+  arriveBy = false,
 }: {
   journey: GeographicJourney;
   all: readonly GeographicJourney[];
   references: References;
   selected: boolean;
   onSelect(): void;
+  /** Arrive-by results lead with the time to leave. */
+  arriveBy?: boolean;
 }) {
   const rides = transitLegs(journey);
   const first = rides[0];
-  const label = distinction(journey, all);
+  const label = distinction(journey, all, arriveBy);
   return (
     <button
       className={`route-card${selected ? ' selected' : ''}`}
@@ -98,11 +101,13 @@ export function RouteCard({
     >
       <span className="route-topline">
         <span>
-          <span className="eyebrow">Arrive</span>
+          <span className="eyebrow">{arriveBy ? 'Leave' : 'Arrive'}</span>
           <span className="arrival-time">
             <JourneyTime
               date={journey.serviceDate}
-              seconds={journey.arrivalTime}
+              seconds={
+                arriveBy ? journey.requestedDepartureTime : journey.arrivalTime
+              }
             />
           </span>
         </span>
@@ -113,6 +118,12 @@ export function RouteCard({
       </span>
       <RouteSequence journey={journey} references={references} />
       <span className="route-metrics">
+        {arriveBy && (
+          <>
+            Arrive {serviceTime(journey.serviceDate, journey.arrivalTime).clock}
+            <span aria-hidden="true"> · </span>
+          </>
+        )}
         {journey.transferCount === 0
           ? 'No transfers'
           : `${journey.transferCount} transfer${journey.transferCount === 1 ? '' : 's'}`}

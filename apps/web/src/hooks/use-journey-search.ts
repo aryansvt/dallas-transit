@@ -1,10 +1,7 @@
 'use client';
 import { useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import type {
-  GeographicRequest,
-  JourneyResponse,
-} from '@dallas-transit/shared';
+import type { JourneyRequest, JourneyResponse } from '@dallas-transit/shared';
 import { errorMessage, type TransitClient } from '../lib/api';
 import type { PreviewSetup } from '../lib/preview-setup';
 
@@ -15,7 +12,7 @@ export function useJourneySearch(
 ) {
   const [request, setRequest] = useState<{
     id: number;
-    input: GeographicRequest;
+    input: JourneyRequest;
   } | null>(null);
   const [fixtureInitial, setFixtureInitial] = useState(true);
   const [replacement, setReplacement] = useState<JourneyResponse | null>(null);
@@ -58,7 +55,7 @@ export function useJourneySearch(
       setBusyPreview(false);
     },
     /** False when the departure cannot become a request; the reason is shown. */
-    start(input: () => GeographicRequest) {
+    start(input: () => JourneyRequest) {
       setMessage('');
       setFixtureInitial(false);
       setBusyPreview(false);

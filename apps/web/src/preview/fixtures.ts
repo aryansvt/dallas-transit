@@ -1,13 +1,17 @@
-import type {
-  GeographicJourney,
-  GeographicRequest,
-  JourneyResponse,
-  Place,
-  References,
-  TransitLeg,
+import {
+  copyPlace,
+  type GeographicJourney,
+  type JourneyRequest,
+  type JourneyResponse,
+  type Place,
+  type References,
+  type TransitLeg,
 } from '@dallas-transit/shared';
 import { ClientError, errorMessage, type TransitClient } from '../lib/api';
+import type { ClassSeries } from '../lib/ics';
+import type { Presets } from '../lib/presets';
 import type { PreviewSetup } from '../lib/preview-setup';
+import { STUDENT_PLACES } from '../lib/student-places';
 
 // Original synthetic presentation fixtures. Names provide Dallas context; times,
 // connections and coordinates are examples, not travel advice or copied feed rows.
@@ -231,8 +235,81 @@ export const scenarios = {
   partial: '11 · Incomplete options',
   expanded: '12 · Expanded map',
   long: '13 · Long destination name',
+  'student-new': '14 · Student, no schedule yet',
+  classes: '15 · Student, next class',
+  'class-ongoing': '16 · Student, in class now',
+  insight: '17 · Departure-time insight',
+  'arrive-by': '18 · Arrive-by results',
+  'student-worst': '19 · Student, worst-case data',
 } as const;
 export type Scenario = keyof typeof scenarios;
+// a fall 2026 timetable; one building has no official entrance yet
+const semester = {
+  startDate: '2026-08-18',
+  minutes: 75,
+  interval: 1,
+  until: '2026-12-03T23:59',
+  exdates: ['2026-11-24T10:00', '2026-11-26T10:00'],
+};
+export const previewClasses: ClassSeries[] = [
+  {
+    ...semester,
+    id: 'cs3345',
+    title: 'CS 3345.001 Data Structures and Algorithmic Analysis',
+    location: 'ECSW 1.315',
+    startTime: '10:00',
+    weekdays: [2, 4],
+  },
+  {
+    ...semester,
+    id: 'cs4349',
+    title: 'CS 4349.002 Advanced Algorithm Design',
+    location: 'JSOM 2.106',
+    startTime: '13:00',
+    weekdays: [2, 4],
+  },
+  {
+    ...semester,
+    id: 'govt2306',
+    title: 'GOVT 2306.004 State and Local Government',
+    location: 'ROC 2.103',
+    startDate: '2026-08-17',
+    startTime: '16:00',
+    weekdays: [1, 3],
+  },
+];
+type WalkingLeg = Extract<GeographicJourney['legs'][number], { kind: 'walk' }>;
+const [utd, , , northside] = STUDENT_PLACES.map(copyPlace);
+const previewPresets: Presets = { version: 1, home: northside!, school: utd! };
+/** Arrive-by results: each option leaves as late as it can. */
+function arriveByResponse(): JourneyResponse {
+  const response = previewResponse();
+  return {
+    publicationId: response.publicationId,
+    serviceDate: response.serviceDate,
+    origin: response.origin,
+    destination: response.destination,
+    requestedArrivalTime: 32400,
+    arrivalBufferMinutes: 10,
+    status: 'ok',
+    incomplete: false,
+    references: response.references,
+    journeys: response.journeys.map((j) => {
+      const [walk, ride] = j.legs as [WalkingLeg, TransitLeg];
+      const access = walk.arrivalTime - walk.departureTime;
+      const leave = ride.departureTime - access - 120;
+      return {
+        ...j,
+        requestedDepartureTime: leave,
+        durationSeconds: j.arrivalTime - leave,
+        legs: [
+          { ...walk, departureTime: leave, arrivalTime: leave + access },
+          ...j.legs.slice(1),
+        ],
+      };
+    }),
+  };
+}
 export function previewSetup(scenario: Scenario): PreviewSetup {
   const response = previewResponse(scenario === 'overnight');
   const setup: PreviewSetup = {
@@ -244,6 +321,88 @@ export function previewSetup(scenario: Scenario): PreviewSetup {
       saved: [previewPlaces[3]!],
     },
   };
+  // Thursday 2026-09-17, 9:30 AM in Dallas
+  const student = { ...setup, destination: null, now: '2026-09-17T14:30:00Z' };
+  if (scenario === 'student-new') return student;
+  // realistic worst case: Google Calendar addresses, long course names, a
+  // building without an entrance, an empty room, five meetings a week, 80 rows
+  if (scenario === 'student-worst')
+    return {
+      ...student,
+      now: '2026-09-17T15:30:00Z',
+      departure: {
+        mode: 'by',
+        date: '2026-09-30',
+        time: '12:50',
+        bufferMinutes: 30,
+      },
+      presets: {
+        version: 1,
+        home: {
+          name: 'Canyon Creek Heights North, 2100 Waterview Parkway, Apartment 4127',
+          context: 'Richardson, TX 75080',
+          latitude: 32.981586,
+          longitude: -96.755264,
+        },
+        school: null,
+      },
+      schedule: [
+        {
+          ...semester,
+          id: 'w1',
+          title:
+            "CS 4485.0W1 Computer Science Project (Senior Design) for Accelerated Bachelor's and Master's Students",
+          location:
+            'ECSW 1.315 (Clark Auditorium), The University of Texas at Dallas, 800 W Campbell Rd, Richardson, TX 75080',
+          startTime: '10:00',
+          weekdays: [1, 2, 3, 4, 5],
+        },
+        {
+          ...semester,
+          id: 'w2',
+          title: 'BMEN 4310.001 Transport Phenomena in Biological Systems',
+          location: 'TI-BMES 2.102',
+          startTime: '12:00',
+          weekdays: [2, 4],
+        },
+        {
+          ...semester,
+          id: 'w3',
+          title: 'Lab',
+          location: '',
+          startTime: '15:00',
+          weekdays: [4],
+        },
+        ...Array.from({ length: 77 }, (_, i) => ({
+          ...semester,
+          id: `seminar-${i}`,
+          title: `UNIV 1010.${String(i + 1).padStart(3, '0')} First-Year Seminar`,
+          location: `SLC 1.${102 + i}`,
+          startTime: '08:00',
+          weekdays: [(i % 5) + 1],
+        })),
+      ],
+    };
+  if (scenario === 'classes' || scenario === 'class-ongoing')
+    return {
+      ...student,
+      presets: previewPresets,
+      schedule: previewClasses,
+      ...(scenario === 'class-ongoing' ? { now: '2026-09-17T15:30:00Z' } : {}),
+    };
+  if (scenario === 'insight')
+    return {
+      ...setup,
+      data: {
+        ...response,
+        departureInsight: {
+          kind: 'leave-earlier',
+          departureTime: 28380,
+          arrivalChangeSeconds: -1080,
+        },
+      },
+    };
+  if (scenario === 'arrive-by') return { ...setup, data: arriveByResponse() };
   if (scenario === 'granted') return { ...setup, destination: null };
   if (scenario === 'manual')
     return { ...setup, origin: null, destination: null };
@@ -310,7 +469,7 @@ export const previewClient: TransitClient = {
       ),
     };
   },
-  async journeys(_request: GeographicRequest, signal) {
+  async journeys(_request: JourneyRequest, signal) {
     await delay(signal);
     return previewResponse();
   },
