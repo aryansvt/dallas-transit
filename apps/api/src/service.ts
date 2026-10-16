@@ -30,7 +30,10 @@ export interface JourneyObservation {
   completedAccessSearches?: number;
   /** Arrive-by forward window runs; the budget is API_POLICY.maxWindowDepartures per access. */
   windowDepartures?: number;
+  /** Departure-time insight wall time, outside compositionMs. */
+  insightMs?: number;
 }
+const TIMEZONE = 'America/Chicago';
 export class JourneyService {
   readonly schedules: PreparedSchedules;
   readonly shutdown = new AbortController();
@@ -38,6 +41,8 @@ export class JourneyService {
     readonly repository: TransitRepository,
     config: ApiConfig,
     readonly walkingProvider?: WalkingProvider,
+    /** Epoch seconds; departure-time insight never suggests the past. */
+    private readonly now = () => Date.now() / 1000,
   ) {
     this.schedules = new PreparedSchedules(repository, {
       sourceKey: config.sourceKey,
@@ -74,7 +79,7 @@ export class JourneyService {
                 loaded.schedule,
                 realtime.current(loaded.schedule.publicationId),
                 Date.now() / 1000,
-                serviceAnchor(request.serviceDate, 'America/Chicago'),
+                serviceAnchor(request.serviceDate, TIMEZONE),
               )
             : loaded.schedule,
           request,
@@ -86,6 +91,7 @@ export class JourneyService {
               Object.assign(observation, progress);
             },
             checkpoint,
+            now: this.now() - serviceAnchor(request.serviceDate, TIMEZONE),
           },
           API_POLICY,
         );
@@ -98,6 +104,9 @@ export class JourneyService {
           ...(result.metrics.windowDepartures === undefined
             ? {}
             : { windowDepartures: result.metrics.windowDepartures }),
+          ...(result.metrics.insightMs === undefined
+            ? {}
+            : { insightMs: result.metrics.insightMs }),
         });
         const failedWalk = result.walkingAttempts.find(
           (a) => a.result.status === 'unavailable',
@@ -133,6 +142,9 @@ export class JourneyService {
             journeys: baseJourneys,
             incomplete: result.incomplete,
             references,
+            ...(result.departureInsight
+              ? { departureInsight: result.departureInsight }
+              : {}),
           };
         }
         switch (result.reason) {

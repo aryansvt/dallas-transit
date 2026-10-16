@@ -1,11 +1,17 @@
 import type {
   Coordinate,
+  DepartureInsight,
   GeographicJourney,
   GeographicRequest,
 } from '@dallas-transit/router';
 
 // Wire contracts only. Importing these types never imports the router into the browser.
-export type { Coordinate, GeographicJourney, GeographicRequest };
+export type {
+  Coordinate,
+  DepartureInsight,
+  GeographicJourney,
+  GeographicRequest,
+};
 export type { TransitLeg } from '@dallas-transit/router';
 export interface StopDetails {
   stopId: string;
@@ -61,6 +67,8 @@ export type JourneyResponse = JourneyContext &
         journeys: readonly GeographicJourney[];
         references: References;
         liveJourneyIds?: readonly string[];
+        /** Depart-at only: a secondary hint, never a replacement journey. */
+        departureInsight?: DepartureInsight;
       }
     | {
         status: 'no-journey';

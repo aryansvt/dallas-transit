@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { performance } from 'node:perf_hooks';
 import { buildSchedule } from '@dallas-transit/router';
 import { geographicFixture } from './geographic-fixture.js';
 import { planGeographicJourney } from './geographic-planner.js';
@@ -407,5 +408,58 @@ describe('geographic request cancellation', () => {
     await rejected;
     expect(provider.route).toHaveBeenCalledTimes(1);
     expect(callSignal?.aborted).toBe(true);
+  });
+});
+
+describe('departure-time insight', () => {
+  // via B: leave 28400, wait at B, ride 29160-29940, arrive 30000; leaving at
+  // 29160 - 180 s walk - 120 s margin arrives just the same
+  const plan = (
+    request: Parameters<typeof planGeographicJourney>[1],
+    now?: number,
+  ) => {
+    const f = geographicFixture();
+    return planGeographicJourney(f.schedule, request, {
+      candidates: f.candidates,
+      walkingProvider: f.provider,
+      ...(now === undefined ? {} : { now }),
+    });
+  };
+  const early = { ...geographicFixture().request, departureTime: 28400 };
+
+  it('adds a hint beside unchanged depart-at journeys when now is known', async () => {
+    const plain = await plan(early);
+    const result = await plan(early, 0);
+    if (result.status !== 'ok' || plain.status !== 'ok')
+      throw new Error('expected journeys');
+    expect(result.journeys).toEqual(plain.journeys);
+    expect(result.departureInsight).toEqual({
+      kind: 'no-rush',
+      departureTime: 28860,
+      arrivalChangeSeconds: 0,
+    });
+    expect(result.metrics.insightMs).toBeGreaterThanOrEqual(0);
+    expect(plain).not.toHaveProperty('departureInsight');
+    expect(plain.metrics).not.toHaveProperty('insightMs');
+  });
+
+  it('gives arrive-by results no hint', async () => {
+    const { origin, destination, serviceDate } = early;
+    const result = await plan(
+      { origin, destination, serviceDate, arrivalTime: 30000 },
+      0,
+    );
+    expect(result.status).toBe('ok');
+    expect(result).not.toHaveProperty('departureInsight');
+  });
+
+  it('drops the hint, not the journeys, when it runs past its time budget', async () => {
+    let clock = 0;
+    vi.spyOn(performance, 'now').mockImplementation(() => (clock += 1000));
+    const result = await plan(early, 0);
+    vi.restoreAllMocks();
+    expect(result.status).toBe('ok');
+    expect(result).not.toHaveProperty('departureInsight');
+    expect(result.metrics.insightMs).toBeGreaterThan(250);
   });
 });

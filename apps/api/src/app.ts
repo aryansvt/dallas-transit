@@ -98,7 +98,12 @@ export function buildApp(
       : config.walkingUrl
         ? valhallaWalkingProvider(config.walkingUrl)
         : undefined);
-  const service = new JourneyService(repository, config, provider);
+  const service = new JourneyService(
+    repository,
+    config,
+    provider,
+    dependencies.now,
+  );
   const live = new LiveJourneys(
     service,
     dependencies.realtime,
