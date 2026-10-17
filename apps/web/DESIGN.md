@@ -165,7 +165,7 @@ Cool ink and warm paper with a bright amber that only appears on dark panels or 
 ### Hierarchy
 
 - **Display** (700, clamp(34px, 9vw, 48px), 1.04): home heading and About title.
-- **Time** (700, tabular, -0.02em on heroes): 44px in lists, 64px for the next class, `clamp(60px, 19vw, 76px)` on the leave board and trip summary. The meridiem is set at 0.42em so the digits carry the size.
+- **Time** (700, tabular, -0.02em on heroes): 44px in lists, 64px for the next class, `clamp(60px, 19vw, 76px)` on the leave board and trip summary. The meridiem is set at 0.42em so the digits carry the size. Hero panels are size containers: a hero time also caps at `33cqi` (and stat or arrival-card times at `25cqi`), so it only shrinks once "12:44 PM" would no longer fit its panel, as at 200% zoom on a phone.
 - **Headline** (700, 30px): destination name on the trip panel.
 - **Title** (700, 22px): section headings.
 - **Body** (400 to 600, 17px, 1.45): default. Secondary text is 15px.
@@ -175,7 +175,7 @@ In `globals.css` every size is a `--text-*` token (label 13, secondary 15, body 
 
 ### Named Rules
 
-**The Tabular Time Rule.** Every time and duration uses tabular figures and never wraps.
+**The Tabular Time Rule.** Every time and duration uses tabular figures and never wraps. When a panel runs out of room, its layout stacks or the time shrinks with the panel; the time itself never breaks or overflows.
 
 ## Layout
 
@@ -242,7 +242,7 @@ A ride's rail (4px) and square dot take its line color, with the contrast-checke
 
 ### Leave-By Board (signature)
 
-Arrive-by results open with a hero panel that settles in: "Leave by" over the hero amber time (it rolls up when it changes), the route line, a relative pill that rolls each minute ("in 26 min", "6 min ago", or the date), then Arrive and Early by facts split by a board-line rule. A passed time is struck through and its pill turns amber. A leave time inside a class, or a passed one, adds an Amber Wash callout with an ink alert tile and one action ("Leave at 11:15 AM instead", "Leave now instead").
+Arrive-by results open with a hero panel that settles in: "Leave by" over the hero amber time (it rolls up when it changes), the route line, a relative pill that rolls each minute ("in 26 min", "6 min ago", or the date), then Arrive and Early by facts split by a board-line rule. A passed time is struck through and its pill turns amber. A leave time inside a class, or a passed one, adds an Amber Wash callout with an ink alert tile and one action ("Leave at 11:15 AM instead", "Leave now instead"). Under 240px of panel width (200% zoom on a phone), Arrive and Early by stack with a board-line rule between them, the pill takes its own line under the time, and the callout puts its text under the alert tile.
 
 ### Transfer Tags
 
