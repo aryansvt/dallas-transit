@@ -715,11 +715,13 @@ time {
   font-size: var(--text-secondary);
   font-weight: 600;
 }
+/* the day label drops under the time when both don't fit */
 .next-class-time {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   justify-content: space-between;
-  gap: 12px;
+  gap: 4px 12px;
   margin: 0;
   color: var(--board-muted);
   font-size: var(--text-secondary);
@@ -728,7 +730,7 @@ time {
 }
 .next-class-clock {
   font-family: var(--font-display);
-  font-size: var(--text-time-xl);
+  font-size: min(var(--text-time-xl), 33cqi);
   font-weight: 700;
   line-height: 1;
   letter-spacing: -0.01em;
@@ -940,6 +942,15 @@ time {
   transition: transform 200ms var(--ease-out);
 }
 
+/* hero panels size their times and layout to their own width, so at 200%
+   zoom or on a narrow phone they shrink and stack instead of overflowing */
+.leave-board,
+.detail-summary,
+.next-class,
+.arrival-step .step-content {
+  container-type: inline-size;
+}
+
 /* leave-by board: arrive-by's answer, in the trip panel's voice */
 .leave-board {
   position: relative;
@@ -963,7 +974,8 @@ time {
   display: block;
   margin-top: 4px;
   font-family: var(--font-display);
-  font-size: var(--text-time-hero);
+  /* "12:44 PM" is 2.9em wide */
+  font-size: min(var(--text-time-hero), 33cqi);
   line-height: 1;
   letter-spacing: -0.02em;
   color: var(--accent);
@@ -1021,7 +1033,8 @@ time {
   /* "1 hr 18 min" breaks between units, never before "min" */
   text-wrap: balance;
   font-family: var(--font-display);
-  font-size: var(--text-headline);
+  /* "12:44 PM" is 3.8em wide */
+  font-size: min(var(--text-headline), 25cqi);
   font-weight: 700;
   line-height: 1.1;
   font-variant-numeric: tabular-nums;
@@ -1054,6 +1067,37 @@ time {
   grid-column: 1 / -1;
   width: 100%;
   text-align: left;
+}
+
+/* too narrow for two stats side by side: stack them, and give the
+   countdown its own line instead of covering the label */
+@container (max-width: 239px) {
+  .leave-facts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .leave-facts > div + div {
+    margin-top: 12px;
+    padding: 12px 0 0;
+    border-left: 0;
+    border-top: 1px solid var(--board-line);
+  }
+  .leave-when {
+    position: static;
+    display: inline-block;
+    margin-top: 10px;
+  }
+  /* the warning takes the full width under its icon; the label already
+     says where the button goes, so its arrow steps aside */
+  .board-alert {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 12px;
+  }
+  .board-alert .secondary-button {
+    padding-inline: 12px;
+  }
+  .board-alert .secondary-button .icon {
+    display: none;
+  }
 }
 
 /* results */
@@ -1626,10 +1670,12 @@ time {
   margin: 0 0 16px;
 }
 .destination-heading h2 {
-  font-size: var(--text-headline);
+  font-size: min(var(--text-headline), 18cqi);
   line-height: 1.1;
   letter-spacing: -0.01em;
   overflow-wrap: anywhere;
+  /* a word too long for a narrow panel breaks at a syllable, with a hyphen */
+  hyphens: auto;
   min-width: 0;
 }
 .detail-summary .icon-button {
@@ -1651,7 +1697,7 @@ time {
   border-top: 1px solid var(--board-line);
 }
 .detail-summary .arrival-time {
-  font-size: var(--text-time-hero);
+  font-size: min(var(--text-time-hero), 33cqi);
   letter-spacing: -0.02em;
   color: var(--accent);
   margin-top: 0;
@@ -1659,7 +1705,9 @@ time {
 .detail-summary .day-label {
   color: var(--board-muted);
 }
+/* stays on the right edge when it wraps under the arrival time */
 .summary-duration {
+  margin-left: auto;
   text-align: right;
 }
 .summary-duration strong {
@@ -2064,7 +2112,14 @@ time {
 }
 .arrival-step .step-heading time {
   color: var(--accent);
-  font-size: var(--text-headline);
+  font-size: min(var(--text-headline), 25cqi);
+}
+/* too narrow for the place and the time side by side: time goes below */
+@container (max-width: 219px) {
+  .arrival-step .step-heading {
+    flex-direction: column;
+    gap: 4px;
+  }
 }
 .arrival-step .eyebrow {
   margin: 0 0 6px;
