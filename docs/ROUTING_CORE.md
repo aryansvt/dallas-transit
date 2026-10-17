@@ -2,7 +2,7 @@
 
 > M9C supersedes the original milestone algorithm/limits described below. Current
 > behavior is specified in [ADR 0005](adr/0005-routing-quality-and-pedestrian-evidence.md)
-> and the [M9C review](MILESTONE_9C_REVIEW.md): four-objective labels, validated
+> and the [M9C review](archive/MILESTONE_9C_REVIEW.md): four-objective labels, validated
 > pedestrian links, total walking accounting, service-aware endpoint shortlists,
 > up to six accepted endpoints per side, sixteen provider calls and 36 pair searches.
 > The remaining text preserves the original milestone rationale and CLI history.
@@ -282,7 +282,7 @@ every resulting itinerary is checked for continuity, chronology, exact scheduled
 events, allowed service/permissions, increasing occurrences and correct counts.
 This is inexpensive differential evidence, not a proof for every possible network.
 PostGIS integration tests exercise the actual loader and publication transitions.
-Real DART examples and observations are in [the review](MILESTONE_3_REVIEW.md).
+Real DART examples and observations are in [the review](archive/MILESTONE_3_REVIEW.md).
 
 Schedule storage is linear in trips/events/stops/patterns/links. Preparation groups
 event tuples, sorts trip IDs and pattern keys, and builds stop indexes once. For

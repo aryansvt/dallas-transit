@@ -32,7 +32,7 @@ router package. Candidate SQL, pedestrian-provider calls, async orchestration an
 local validation live beside Milestone 3's loader in the existing worker. The core
 imports no database/HTTP/UI/realtime code and never calls a provider. The transit
 algorithm, schedule builder, M3 types, SQL migrations and applications are unchanged.
-See [the complete design](GEOGRAPHIC_JOURNEY_PLANNING.md).
+See [the complete design](../GEOGRAPHIC_JOURNEY_PLANNING.md).
 
 ## D. Dependencies added
 
@@ -362,7 +362,7 @@ The CLI distinguishes offline `fixture`, SQL `candidates`, and configured real
 `provider` modes. Missing provider configuration exits nonzero with a structured
 unavailable result. Fixture mode never queries the network; candidate mode never
 fabricates walks. Exact reproducible command forms and policy overrides are in
-[DEVELOPMENT.md](DEVELOPMENT.md#geographic-journey-validation).
+[DEVELOPMENT.md](../DEVELOPMENT.md#geographic-journey-validation).
 
 | Required gate                                                                                 | Result                                          |
 | --------------------------------------------------------------------------------------------- | ----------------------------------------------- |

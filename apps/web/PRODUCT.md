@@ -42,7 +42,7 @@ Used on a phone, often outdoors or at a stop, on spotty networks. Flow: origin (
 ## Evidence on Hand
 
 - Deployed app: https://linefinder-dart.vercel.app
-- Docs: `docs/PROJECT_SPEC.md`, `docs/MILESTONE_9C_REVIEW.md`, `docs/DEPLOYMENT.md`.
+- Docs: `docs/PROJECT_SPEC.md`, `docs/archive/MILESTONE_9C_REVIEW.md`, `docs/DEPLOYMENT.md`.
 - No testimonials, usage numbers or user research exist; do not fabricate any.
 
 ## Product Principles

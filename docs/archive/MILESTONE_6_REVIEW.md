@@ -392,7 +392,7 @@ pnpm --filter @dallas-transit/web dev
 Normal mode reports unconfigured capabilities deliberately. Geolocation needs
 HTTPS/trustworthy localhost. Ctrl+C stops app terminals; `pnpm infra:down` stops
 Docker **without deleting retained data**. Never use `--volumes`, reimport/reset or
-reactivation for UI review. Full workflow: [DEVELOPMENT.md](DEVELOPMENT.md#m6-web-and-preview-workflow).
+reactivation for UI review. Full workflow: [DEVELOPMENT.md](../DEVELOPMENT.md#m6-web-and-preview-workflow).
 
 ## U. Known limitations
 
@@ -513,7 +513,7 @@ No accepted ADR has been edited. The temporary identifier lives in
 
 API and web link the existing shared workspace; shared has a types-only router
 dependency. No new workspace or component/date/HTTP/browser-test framework.
-See [dependency rationale and costs](DEVELOPMENT.md#m6-dependency-decisions).
+See [dependency rationale and costs](../DEVELOPMENT.md#m6-dependency-decisions).
 TanStack's initially fetched newest release was replaced with the preceding stable
 release; no release-age exceptions remain. Existing direct dependencies are unchanged.
 
@@ -934,7 +934,7 @@ Or `pnpm infra:up` then `pnpm dev` for both apps. Use Ctrl+C in app terminals an
 `pnpm infra:down` to stop backing services **without deleting the retained volume**.
 Never use `--volumes`, reset data or reactivate a publication for frontend review.
 Frontend/API tests: `pnpm test:web`, `pnpm test:api`; full commands and optional
-configuration are in [DEVELOPMENT.md](DEVELOPMENT.md#m6-web-and-preview-workflow).
+configuration are in [DEVELOPMENT.md](../DEVELOPMENT.md#m6-web-and-preview-workflow).
 
 ## AH. Git status/hygiene
 

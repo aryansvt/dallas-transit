@@ -20,7 +20,7 @@ DART realtime enablement or M9C work. No new production dependency or routing ch
   Data survives restarts; expired feed coverage still requires a deliberate refresh.
 - Vercel remains rooted at `apps/web`, with workspace install/build and tracing root.
   Exact settings, environment separation, backup, rollback and troubleshooting are
-  in [DEPLOYMENT.md](DEPLOYMENT.md). Manual dashboards avoid guessed paid plan IDs.
+  in [DEPLOYMENT.md](../DEPLOYMENT.md). Manual dashboards avoid guessed paid plan IDs.
 
 ## Boundary, security and privacy
 

@@ -387,6 +387,7 @@ function Planner({
               selected={trip.selected}
               classes={classes}
               now={now}
+              client={client}
               onCancel={() =>
                 trip.reset(
                   'Search canceled. You can change your trip and search again.',

@@ -7,6 +7,42 @@ Milestone 5 adds the journey/metadata API and long-lived service lifecycle.
 All accepted ADRs remain unchanged.
 Use the [README](../README.md) for setup and root commands.
 
+## Workflow
+
+- One issue per branch, named by type: `feat/arrive-by-window-search`,
+  `fix/m9c-routing-latency`, `docs/...`. Branch from an up-to-date `main`.
+- Read the relevant design doc and [ADRs](adr/README.md) before changing behavior.
+  Make the smallest change that solves the issue. If it contradicts an accepted
+  ADR, write a new ADR in the same PR.
+- Add tests with the change. Run the targeted suite while iterating and the full
+  gates in [CONTRIBUTING.md](../CONTRIBUTING.md) once before opening the PR.
+
+Durable decisions live in `AGENTS.md`, [PROJECT_SPEC.md](PROJECT_SPEC.md),
+[ARCHITECTURE.md](ARCHITECTURE.md), [ROADMAP.md](ROADMAP.md) and the ADRs.
+Issue-specific context belongs in the issue, the PR description and the tests.
+Investigation notes go into `docs/` only when they stay useful after the PR.
+
+`AGENTS.md` holds the rules coding assistants follow in this repository. Add a
+nested `AGENTS.md` inside a package only when the root rules stop being enough.
+Review assistant-written code like any other: if you cannot explain a change or
+point at the test that covers it, do not merge it.
+
+## Testing approach
+
+Routing mistakes mislead riders, so routing behavior gets deterministic tests.
+
+- Tiny artificial networks where the right answer is obvious are the main
+  evidence: a direct route, one transfer, a missed transfer, equal arrivals with
+  different transfer counts, an earlier arrival with more walking, a calendar
+  exception, a trip past midnight. Assert exact legs, not only arrival times.
+- Unit tests cover parsers, service calendars, GTFS times past 24:00, transfer
+  calculations and ranking.
+- Real DART journeys are integration evidence. They read a retained publication,
+  never a live feed.
+- OpenTripPlanner (`pnpm otp:validate`) is a reference. A disagreement is
+  something to investigate, not a test to update.
+- Test behavior rather than markup. The web suite has no snapshot tests.
+
 ## Packages and compilation
 
 All eight workspaces are private packages under `@dallas-transit/*`.
@@ -261,7 +297,7 @@ No provider URL is enabled by default. `--mode provider` uses one run without a
 warm-up or retries; configure small counts/concurrency for the selected service.
 The public demo was used only for one two-call development observation, not as
 production infrastructure. See [the design](GEOGRAPHIC_JOURNEY_PLANNING.md) and
-[review](MILESTONE_4_REVIEW.md) for contracts, bounds, exact evidence and limitations.
+[review](archive/MILESTONE_4_REVIEW.md) for contracts, bounds, exact evidence and limitations.
 
 ## Journey API workflow
 
@@ -302,8 +338,9 @@ package/version, migration, workspace or infrastructure service is added.
 
 ## M6 web and preview workflow
 
-Read [the approved design](MILESTONE_6_DESIGN.md) and
-[the human-review checkpoint](MILESTONE_6_REVIEW.md). The working LineFinder name,
+The current visual system is [apps/web/DESIGN.md](../apps/web/DESIGN.md) and the
+product constraints are in [apps/web/PRODUCT.md](../apps/web/PRODUCT.md). The
+original M6 design and review are in the [archive](archive/README.md). The working LineFinder name,
 description and owner-supplied public links are centralized in
 `apps/web/src/lib/product.ts`. Package/repository identifiers are unchanged.
 
